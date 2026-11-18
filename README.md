@@ -4,6 +4,8 @@ UE24CS352A Machine Learning hackathon, team 148.
 
 PathSnap matches noisy GPS trajectories to a road network. It generates candidate road segments for every GPS point, scores them with a trained classifier, and decodes a connected route with an HMM/Viterbi decoder. A FastAPI server (Laptop 1) runs the pipeline. A Streamlit UI (Laptop 2) lets the evaluator pick a trip and see the result.
 
+> **Team split and workflow: see [SPLIT.md](SPLIT.md).**
+>
 > **Status:** project foundation (loaders, geometry, network analysis, dataset inventory, API/UI skeletons). Candidate generation, features, models, HMM and evaluation are still to be built; see the TODO docstrings in `src/pathsnap/`.
 
 ## Repository layout
@@ -13,7 +15,7 @@ PathSnap matches noisy GPS trajectories to a road network. It generates candidat
 | `configs/` | YAML configs: data partitions, candidate search, HMM, API |
 | `data/raw/{train,student_test,evaluator}/` | Raw trip files (gitignored, not committed) |
 | `src/pathsnap/` | Library code: `io`, `geo`, `network`, `labels`, `candidates`, `features`, `models`, `metrics`, `hmm`, `pipeline`, `viz` |
-| `scripts/` | Runnable stages (`inventory.py`, …) and launchers (`run_api.sh`, `run_ui.sh`) |
+| `scripts/` | Runnable stages (`inventory.py`, …), launchers (`run_api.sh`, `run_ui.sh`) and per-person model scripts in `scripts/models/` |
 | `notebooks/` | EDA and experiment notebooks |
 | `experiments/` | Results CSVs, logs, Optuna study, figures |
 | `artifacts/` | Exported model, preprocessing and HMM config used by the API |
