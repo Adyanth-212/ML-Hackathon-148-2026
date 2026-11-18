@@ -39,7 +39,7 @@ At inference time call `generate_candidates(TripGeometry.from_trip(trip), trip_i
 ## Pipeline (works now, with the trained model)
 
 `pathsnap.pipeline.predict_trip(trip, artifacts)` returns `{"gps", "pred_arcs", "route_lonlat", "timings_ms", "no_candidate_obs", "method"}`. It never takes a route.
-- `artifacts = load_artifacts()` loads `artifacts/model.joblib` (currently LightGBM, chosen by best CV Top-1) and scores candidates with `features.build_features`. Student_test Top-1 is 0.879 with continuity 0.867, at ~77 ms per trip (`experiments/results/pipeline_summary.csv`).
+- `artifacts = load_artifacts()` loads `artifacts/model.joblib` (currently Bayesian-tuned LightGBM `advitha_lgbm_tuned`, chosen by best CV Top-1) and scores candidates with `features.build_features`. Student_test Top-1 is 0.880 with continuity 0.867, at ~209 ms per trip (`experiments/results/pipeline_summary.csv`).
 - `artifacts = None` (or `{}`) uses the rule-based baseline: distance + 20 m × heading mismatch, Top-1 0.832.
 - **HMM hook (Sudhe):** if `pathsnap.hmm` defines `make_decoder(config: dict)` returning `decoder(geom, cands, scores) -> np.ndarray` (one arc id per observation), `load_artifacts()` picks it up automatically with `configs/hmm.yaml`. `scores` are the classifier probabilities in candidate-row order.
 - **Tilak (API):** nothing to change. `api/main.py`'s own loader returns `{"mode": "classifier", "model": est}`, and `predict_trip` wraps that `model` in the same feature-based scorer (checked: identical predictions to `pipeline.load_artifacts()`). The response keeps every field the UI uses (`route_arc_ids`, `network_lonlat`, `nearest_dist_m`, `model`, `timings_ms.total`). Re-export after Bayesian tuning with `python scripts/export_artifacts.py <tuned_model_name>`.

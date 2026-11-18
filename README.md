@@ -69,7 +69,10 @@ python scripts/models/advitha_lgbm.py
 python scripts/models/advitha_hgb.py
 python scripts/models/advitha_xgb.py
 python scripts/models/adyanth_sgd.py
-python scripts/cv_compare.py             # comparison table + figure  -> experiments/results/model_comparison.csv
+python scripts/optimize.py             # Bayesian optimisation of LightGBM (Optuna, ~85 min) -> experiments/results/bayes_opt/
+python scripts/models/advitha_lgbm_tuned.py  # tuned LightGBM through the harness
+python scripts/compare_tuning.py         # untuned vs tuned        -> experiments/results/tuning_comparison.csv
+python scripts/cv_compare.py             # comparison table + figures -> experiments/results/model_comparison.csv, experiments/figures/{model_comparison,cv_macro_f1,confusion_matrices}.png
 python scripts/export_artifacts.py       # selected model (best CV Top-1) -> artifacts/model.joblib, metadata.json
 python scripts/eval_pipeline.py          # predict_trip end to end on student_test -> experiments/results/pipeline_*.csv
 python scripts/make_maps.py --predicted  # report maps: reference vs predicted route -> maps/predicted_*.html
