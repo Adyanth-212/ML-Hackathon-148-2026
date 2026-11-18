@@ -1,28 +1,25 @@
-"""End-to-end inference for one trip.
+"""End-to-end inference for one trip (used by the API and the offline evaluation).
 
 ``predict_trip`` deliberately takes NO reference route: ground truth must never
 enter the prediction pipeline. Scoring happens afterwards in api/evaluation.py.
 
 Stages: project -> candidates (configs/candidates.yaml) -> score candidates ->
-pick one arc per observation -> route geometry.
+pick one arc per observation -> route geometry + network overlay for the UI.
 
 Scoring, in order of preference:
-1. ``artifacts["scorer"](geom, cands) -> P(candidate is the true arc)``: the trained
-   classifier (+ features) once it exists; higher is better.
-2. Otherwise the **baseline rule**: score = -(dist_m + heading_weight_m * mismatch),
+1. ``artifacts["scorer"](geom, cands) -> P(candidate is the true arc)``, as built by
+   ``load_artifacts()`` from the exported classifier (``scripts/export_artifacts.py``).
+2. ``artifacts["model"]`` (a fitted estimator with ``predict_proba``, as loaded by the
+   API's own loader): wrapped into the same feature-based scorer automatically.
+3. Otherwise the **baseline rule**: score = -(dist_m + heading_weight_m * mismatch),
    where mismatch = (1 - cos(GPS heading, arc direction)) / 2. With heading_weight_m = 0
-   this is the plain nearest-arc rule.
+   this is the plain nearest-arc rule. ``artifacts={"mode": "nearest_arc"}`` forces it.
 An optional ``artifacts["decoder"](geom, cands, scores) -> arc per obs`` (the HMM) replaces
-the per-observation argmax.
+the per-observation argmax. ``load_artifacts()`` picks it up from
+``pathsnap.hmm.make_decoder(config)`` once that exists.
 
 Observations without any candidate inherit the arc of the nearest observation in time
 that has one, and are listed in ``no_candidate_obs``.
-
-``load_artifacts()`` builds the artifacts dict from ``artifacts/``: the exported classifier
-(``scripts/export_artifacts.py``) wrapped as a scorer over ``features.build_features``, and,
-once the HMM exists, a decoder from ``pathsnap.hmm.make_decoder(config)`` (contract:
-returns ``decoder(geom, cands, scores) -> np.ndarray`` of one arc id per observation, -1
-allowed where it cannot decide). The API calls ``load_artifacts()`` once at startup.
 """
 from __future__ import annotations
 
@@ -33,43 +30,103 @@ import pandas as pd
 
 from .candidates import generate_candidates
 from .geo import TripGeometry
+from .labels import obs_heading
 
 BASELINE_HEADING_WEIGHT_M = 20.0  # chosen on TRAIN by scripts/eval_baseline.py (heading sweep)
 HEADING_MIN_MOVE_M = 5.0
+NETWORK_OVERLAY_MARGIN_M = 100.0
+NETWORK_OVERLAY_MAX_ARCS = 3000
 
 
+# --------------------------------------------------------------------------- scoring
 def baseline_scores(geom: TripGeometry, cands: pd.DataFrame,
                     heading_weight_m: float = BASELINE_HEADING_WEIGHT_M) -> np.ndarray:
-    """Higher = better. Uses only GPS + network geometry."""
-    score = -cands["dist_m"].to_numpy(np.float64)
+    """Higher = better. Distance plus GPS-heading / arc-direction agreement (no labels)."""
+    scores = -cands["dist_m"].to_numpy(np.float64)
     if heading_weight_m > 0 and len(cands):
-        obs, arc = cands["obs_idx"].to_numpy(), cands["arc_id"].to_numpy()
-        # mismatch for each (obs, arc) pair, computed per unique arc block to stay vectorised
-        mm = _pair_heading_mismatch(geom, obs, arc)
-        score -= heading_weight_m * mm
-    return score
+        obs = cands["obs_idx"].to_numpy(np.int64)
+        arc = cands["arc_id"].to_numpy(np.int64)
+        ux, uy, valid = obs_heading(geom, HEADING_MIN_MOVE_M)
+        vx, vy = geom.bx[arc] - geom.ax[arc], geom.by[arc] - geom.ay[arc]
+        length = np.hypot(vx, vy)
+        with np.errstate(invalid="ignore", divide="ignore"):
+            cosine = (ux[obs] * vx + uy[obs] * vy) / length
+        mismatch = np.where(valid[obs] & (length > 0), (1.0 - cosine) / 2.0, 0.0)
+        scores -= heading_weight_m * mismatch
+    return scores
 
 
-def _pair_heading_mismatch(geom: TripGeometry, obs: np.ndarray, arc: np.ndarray) -> np.ndarray:
-    from .labels import obs_heading
+def classifier_scorer(model):
+    """Wrap a fitted estimator (predict_proba on FEATURE_COLUMNS) as a pipeline scorer."""
+    from .features import FEATURE_COLUMNS, build_features
 
-    ux, uy, valid = obs_heading(geom, HEADING_MIN_MOVE_M)
-    vx, vy = geom.bx[arc] - geom.ax[arc], geom.by[arc] - geom.ay[arc]
-    ln = np.hypot(vx, vy)
-    with np.errstate(invalid="ignore", divide="ignore"):
-        cos = (ux[obs] * vx + uy[obs] * vy) / ln
-    mm = (1.0 - cos) / 2.0
-    return np.where(valid[obs] & (ln > 0), mm, 0.0)
+    def scorer(geom: TripGeometry, cands: pd.DataFrame) -> np.ndarray:
+        if len(cands) == 0:
+            return np.zeros(0)
+        X = build_features(geom, cands)[FEATURE_COLUMNS].to_numpy(np.float32)
+        return model.predict_proba(X)[:, 1]
+
+    return scorer
 
 
+def load_artifacts(directory: str = "artifacts", use_decoder: bool = True) -> dict:
+    """Load the exported classifier (and the HMM decoder when available) for predict_trip.
+
+    Returns ``{"mode", "model", "scorer", "metadata", ["decoder"]}``. Without
+    ``model.joblib`` it returns ``{"mode": "nearest_arc"}``, i.e. the rule-based baseline.
+    """
+    import json
+
+    import joblib
+
+    from .config import load_config, repo_path
+    from .features import FEATURE_COLUMNS
+
+    root = repo_path(directory)
+    model_path = root / "model.joblib"
+    if not model_path.exists():
+        return {"mode": "nearest_arc"}
+    model = joblib.load(model_path)
+    if isinstance(model, dict):  # bundle format {"model": est, ...}
+        model = model["model"]
+    meta = json.loads((root / "metadata.json").read_text()) if (root / "metadata.json").exists() else {}
+    if meta.get("features", FEATURE_COLUMNS) != FEATURE_COLUMNS:
+        raise ValueError("artifacts/model.joblib was trained on a different feature list; re-export it")
+
+    out = {"mode": "classifier", "model": model, "scorer": classifier_scorer(model), "metadata": meta,
+           "artifact_path": str(model_path)}
+    if use_decoder:
+        try:
+            from . import hmm
+            make = getattr(hmm, "make_decoder", None)
+            if make is not None:
+                out["decoder"] = make(load_config("hmm"))
+        except NotImplementedError:
+            pass
+    return out
+
+
+def _resolve_scorer(artifacts: dict):
+    baseline = f"baseline: dist + {BASELINE_HEADING_WEIGHT_M:g} m x heading mismatch"
+    if artifacts.get("mode") == "nearest_arc":
+        return None, baseline
+    if artifacts.get("scorer") is not None:
+        return artifacts["scorer"], artifacts.get("metadata", {}).get("model", "artifact")
+    if artifacts.get("model") is not None and hasattr(artifacts["model"], "predict_proba"):
+        return classifier_scorer(artifacts["model"]), artifacts.get("metadata", {}).get("model", "artifact")
+    return None, baseline
+
+
+# --------------------------------------------------------------------------- decoding
 def argmax_per_obs(cands: pd.DataFrame, scores: np.ndarray, n_obs: int) -> np.ndarray:
     """Best-scoring arc per observation (-1 where there is no candidate). Ties: first row,
     i.e. the nearer / lower arc_id candidate, because rows are sorted by (obs, dist, arc_id)."""
     pred = np.full(n_obs, -1, dtype=np.int64)
     if len(cands):
-        d = pd.DataFrame({"obs": cands["obs_idx"].to_numpy(), "arc": cands["arc_id"].to_numpy(), "s": scores})
+        d = pd.DataFrame({"obs": cands["obs_idx"].to_numpy(), "arc": cands["arc_id"].to_numpy(),
+                          "s": np.asarray(scores)})
         best = d.loc[d.groupby("obs", sort=False)["s"].idxmax()]
-        pred[best["obs"].to_numpy()] = best["arc"].to_numpy()
+        pred[best["obs"].to_numpy(np.int64)] = best["arc"].to_numpy(np.int64)
     return pred
 
 
@@ -88,66 +145,71 @@ def fill_missing(pred: np.ndarray, t: np.ndarray) -> np.ndarray:
     return out
 
 
-def route_lonlat(trip, arc_seq: np.ndarray) -> list[list[float]]:
-    """Polyline through the predicted arcs (consecutive duplicates removed). Arcs that do not
-    connect are joined by a straight line; the HMM stage replaces this with shortest-path fill."""
-    if len(arc_seq) == 0:
-        return []
-    keep = np.r_[True, arc_seq[1:] != arc_seq[:-1]]
-    seq = arc_seq[keep]
-    f = trip.arcs["from_node"].to_numpy()[seq]
-    t = trip.arcs["to_node"].to_numpy()[seq]
-    nodes = np.ravel(np.c_[f, t])
-    nodes = nodes[np.r_[True, nodes[1:] != nodes[:-1]]]
-    lon, lat = trip.nodes["lon"].to_numpy()[nodes], trip.nodes["lat"].to_numpy()[nodes]
-    return np.c_[lon, lat].round(7).tolist()
-
-
-def load_artifacts(directory: str = "artifacts", use_decoder: bool = True) -> dict:
-    """Load the exported classifier (and the HMM decoder when available) for predict_trip.
-
-    Returns ``{"scorer", "decoder" (optional), "metadata"}``. Without ``model.joblib`` it
-    returns ``{}``, i.e. the rule-based baseline.
-    """
-    import json
-
-    import joblib
-
-    from .config import load_config, repo_path
-    from .features import FEATURE_COLUMNS, build_features
-
-    root = repo_path(directory)
-    model_path = root / "model.joblib"
-    if not model_path.exists():
-        return {}
-    model = joblib.load(model_path)
-    meta = json.loads((root / "metadata.json").read_text()) if (root / "metadata.json").exists() else {}
-    feats = meta.get("features", FEATURE_COLUMNS)
-    if feats != FEATURE_COLUMNS:
-        raise ValueError("artifacts/model.joblib was trained on a different feature list; re-export it")
-
-    def scorer(geom: TripGeometry, cands: pd.DataFrame) -> np.ndarray:
-        if len(cands) == 0:
-            return np.zeros(0)
-        X = build_features(geom, cands)[FEATURE_COLUMNS].to_numpy(np.float32)
-        return model.predict_proba(X)[:, 1]
-
-    out = {"scorer": scorer, "metadata": meta}
-    if use_decoder:
-        try:
-            from . import hmm
-            make = getattr(hmm, "make_decoder", None)
-            if make is not None:
-                out["decoder"] = make(load_config("hmm"))
-        except NotImplementedError:
-            pass
+# --------------------------------------------------------------------------- geometry for the UI
+def _deduplicate(values) -> list[int]:
+    out: list[int] = []
+    for v in values:
+        v = int(v)
+        if not out or out[-1] != v:
+            out.append(v)
     return out
 
 
+def route_lonlat(trip, route_arc_ids: list[int]) -> list[list[float]]:
+    """Polyline through the predicted arcs (consecutive duplicates removed). Arcs that do not
+    connect are joined by a straight line; the HMM stage replaces this with connected routes."""
+    if not route_arc_ids:
+        return []
+    pairs = trip.arcs[["from_node", "to_node"]].to_numpy(np.int64)
+    nodes: list[int] = []
+    for a in route_arc_ids:
+        u, v = int(pairs[a, 0]), int(pairs[a, 1])
+        if nodes and nodes[-1] == u:
+            nodes.append(v)
+        else:
+            nodes.extend([u, v])
+    lon = trip.nodes["lon"].to_numpy(float)[nodes]
+    lat = trip.nodes["lat"].to_numpy(float)[nodes]
+    return np.column_stack([lon, lat]).round(7).tolist()
+
+
+def network_overlay(geom: TripGeometry) -> list[list[list[float]]]:
+    """Arcs inside the track's bounding box + margin (at most NETWORK_OVERLAY_MAX_ARCS), as lon/lat segments."""
+    m = NETWORK_OVERLAY_MARGIN_M
+    gx, gy = geom.obs_x, geom.obs_y
+    ax, ay, bx, by = geom.ax, geom.ay, geom.bx, geom.by
+    in_view = ((np.maximum(ax, bx) >= gx.min() - m) & (np.minimum(ax, bx) <= gx.max() + m)
+               & (np.maximum(ay, by) >= gy.min() - m) & (np.minimum(ay, by) <= gy.max() + m))
+    ids = np.flatnonzero(in_view)[:NETWORK_OVERLAY_MAX_ARCS]
+    if not len(ids):
+        return []
+    ex = np.column_stack([ax[ids], bx[ids]]).ravel()
+    ey = np.column_stack([ay[ids], by[ids]]).ravel()
+    lon, lat = geom.proj.inverse(ex, ey)
+    return np.column_stack([lon, lat]).reshape(-1, 2, 2).astype(float).tolist()
+
+
+def selected_distances(cands: pd.DataFrame, pred: np.ndarray) -> list[float | None]:
+    """Distance (m) from each GPS point to its predicted arc; None where it is not a candidate."""
+    out = np.full(len(pred), np.nan)
+    if len(cands):
+        obs = cands["obs_idx"].to_numpy(np.int64)
+        hit = cands["arc_id"].to_numpy(np.int64) == pred[obs]
+        out[obs[hit]] = cands["dist_m"].to_numpy(float)[hit]
+    return [None if np.isnan(v) else round(float(v), 3) for v in out]
+
+
+# --------------------------------------------------------------------------- entry point
 def predict_trip(trip, artifacts=None) -> dict:
-    """Per-observation predicted arc ids plus route geometry and timings. No reference route."""
+    """Predict one arc per GPS observation without accessing ground truth."""
     artifacts = artifacts or {}
-    timings = {}
+    if trip.track is None or trip.track.empty:
+        raise ValueError(f"Trip {trip.trip_id} has no GPS observations")
+    if trip.nodes is None or trip.arcs is None or trip.arcs.empty:
+        raise ValueError(f"Trip {trip.trip_id} is missing its road network")
+    started = time.perf_counter()
+    timings: dict[str, float] = {}
+
     t0 = time.perf_counter()
     geom = TripGeometry.from_trip(trip)
     timings["project_ms"] = (time.perf_counter() - t0) * 1000
@@ -157,8 +219,8 @@ def predict_trip(trip, artifacts=None) -> dict:
     timings["candidates_ms"] = (time.perf_counter() - t0) * 1000
 
     t0 = time.perf_counter()
-    scorer = artifacts.get("scorer")
-    scores = scorer(geom, cands) if scorer is not None else baseline_scores(geom, cands)
+    scorer, scorer_name = _resolve_scorer(artifacts)
+    scores = np.asarray(scorer(geom, cands)) if scorer is not None else baseline_scores(geom, cands)
     timings["scoring_ms"] = (time.perf_counter() - t0) * 1000
 
     t0 = time.perf_counter()
@@ -168,18 +230,29 @@ def predict_trip(trip, artifacts=None) -> dict:
     timings["decode_ms"] = (time.perf_counter() - t0) * 1000
 
     t0 = time.perf_counter()
-    route = route_lonlat(trip, pred[pred >= 0])
+    valid_pred = pred[pred >= 0]
+    route = route_lonlat(trip, _deduplicate(valid_pred))
     timings["route_ms"] = (time.perf_counter() - t0) * 1000
-    timings["total_ms"] = sum(timings.values())
+
+    t0 = time.perf_counter()
+    overlay = network_overlay(geom)
+    nearest = selected_distances(cands, pred)
+    timings["overlay_ms"] = (time.perf_counter() - t0) * 1000
+    timings["total"] = (time.perf_counter() - started) * 1000
+    timings["total_ms"] = timings["total"]
 
     return {
-        "gps": trip.track[["lon", "lat"]].to_numpy().round(7).tolist(),
+        "trip_id": trip.trip_id,
+        "gps": trip.track[["lon", "lat"]].to_numpy(float).round(7).tolist(),
         "pred_arcs": pred.tolist(),
+        "route_arc_ids": valid_pred.tolist(),
         "route_lonlat": route,
+        "network_lonlat": overlay,
+        "nearest_dist_m": nearest,
         "timings_ms": {k: round(v, 2) for k, v in timings.items()},
-        "no_candidate_obs": no_cand.tolist(),
-        "method": {"scorer": (artifacts.get("metadata", {}).get("model", "artifact") if scorer is not None else
-                              f"baseline: dist + {BASELINE_HEADING_WEIGHT_M:g} m x heading mismatch"),
+        "no_candidate_obs": np.asarray(no_cand, dtype=int).tolist(),
+        "method": {"scorer": scorer_name,
                    "decoder": "artifact" if decoder is not None else "per-observation argmax",
                    "n_candidates": int(len(cands))},
+        "model": "nearest_arc_baseline" if scorer is None else "trained_artifact",
     }
