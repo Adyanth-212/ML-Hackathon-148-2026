@@ -1,6 +1,6 @@
 """Adyanth model 2: Gaussian Naive Bayes (generative, probabilistic).
 
-    python scripts/models/adyanth_gnb.py
+    python scripts/models/adyanth_gnb.py    # writes adyanth_gnb (distance only) and adyanth_gnb_dir (+ direction)
 
 Assumes features are conditionally independent and Gaussian given the class. Our features are
 strongly dependent (dist_m, dist_rank and dist_minus_min all measure closeness), so this model
@@ -21,4 +21,5 @@ CONFIG = {"var_smoothing": 1e-9, "priors": "empirical", "scaler": "standard"}
 
 if __name__ == "__main__":
     est = Pipeline([("scale", StandardScaler()), ("clf", GaussianNB(var_smoothing=CONFIG["var_smoothing"]))])
-    evaluate("adyanth_gnb", "probabilistic (generative)", est, CONFIG)
+    evaluate("adyanth_gnb", "probabilistic (generative)", est, CONFIG, feature_set="dist")
+    evaluate("adyanth_gnb_dir", "probabilistic (generative)", est, CONFIG, feature_set="dist+dir")
