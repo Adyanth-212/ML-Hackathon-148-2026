@@ -115,3 +115,19 @@ Notes for the feature/model owners:
 - About half the rows are twins (an arc and its reverse) with identical `dist_m`, and `proj_frac` mirrored (t vs 1 - t). Only direction features (GPS heading vs arc bearing) can separate them.
 - Each observation has at most one `label == 1`. Observations without a positive row are the misses above; for training, keep or drop them consistently, and drop `is_outlier` observations (join `data/processed/labels/...` on `trip_id, obs_idx`).
 - `proj_frac` is unclipped: < 0 or > 1 means the nearest point is an arc endpoint.
+
+## 9. Baseline pipeline (rule, not ML)
+Source: `src/pathsnap/pipeline.py`, `scripts/eval_baseline.py` -> `experiments/results/baseline_heading_sweep.csv`, `baseline_student_test.csv`.
+
+`predict_trip(trip, artifacts)` works end to end without a model: it projects the trip, builds candidates (R = 60 m, K = 30), scores each candidate as `-(dist_m + w * (1 - cos(heading, arc direction)) / 2)`, takes the argmax per observation, gives observations without candidates the arc of the nearest-in-time observation, and returns the SPLIT.md prediction contract. A trained classifier (`artifacts["scorer"]`) and the HMM (`artifacts["decoder"]`) plug in without code changes.
+
+Heading weight w chosen on TRAIN (reliable-label Top-1):
+
+| w (m) | 0 (nearest arc) | 2 | 5 | 10 | 20 | 40 |
+|---|---|---|---|---|---|---|
+| train Top-1 | 0.548 | 0.797 | 0.808 | 0.819 | **0.822** | 0.813 |
+| student_test Top-1 | 0.530 | 0.813 | 0.821 | 0.832 | 0.832 | 0.827 |
+
+w = 20 m. Student_test via the real `predict_trip` path: Top-1 0.832, route continuity (arc changes that share a node) 0.73 on average, about 21 ms per trip (stage timings in the CSV).
+- Caveat: the label aligner also uses a heading term (section 7). It only decides between route arcs, mostly a street's two directions when the route uses both, so it does not make the baseline right by construction. The jump from 0.53 to 0.83 comes mostly from points on one-pass two-way streets, where the label is fixed by route order alone.
+- Continuity is low (0.73) because a per-point argmax flips between parallel and adjacent arcs. Fixing that is exactly the HMM's job.
