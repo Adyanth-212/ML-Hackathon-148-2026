@@ -1,5 +1,6 @@
-# Candidate generation. These are PLACEHOLDERS: choose the final values from the
-# candidate-miss-rate analysis on TRAINING trips only, and record why.
-radius_m: 50          # search radius around each GPS point (metres)
-max_candidates: 10    # keep at most K nearest arcs per observation
-fallback_radius_m: 150  # one retry with a wider radius when no arc is found
+# Candidate generation. Chosen from the candidate-miss-rate sweep on TRAINING trips only
+# (scripts/candidate_sweep.py -> experiments/results/candidate_miss_rate.csv; reasoning in
+# docs/data_quality_log.md section 8). Changing these invalidates everyone's feature tables.
+radius_m: 60          # search radius around each GPS point (metres)
+max_candidates: 30    # keep at most K nearest arcs per observation, ordered by (dist_m, arc_id)
+fallback_radius_m: 150  # one retry with a wider radius when no arc is found within radius_m

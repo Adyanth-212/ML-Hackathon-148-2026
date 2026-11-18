@@ -54,8 +54,16 @@ data/raw/evaluator/      10 trips: final evaluation only
 ## Running the stages
 
 ```bash
-python scripts/inventory.py      # EDA step 1 -> experiments/results/inventory.csv
+python scripts/inventory.py         # dataset inventory          -> experiments/results/inventory.csv
+python scripts/eda.py               # EDA tables + figures       -> experiments/results/eda_*.csv, experiments/figures/eda_*.png
+python scripts/make_maps.py         # Folium EDA maps            -> maps/eda_*.html
+python scripts/build_labels.py      # per-observation labels     -> data/processed/labels/, experiments/results/label_quality.csv
+python scripts/make_maps.py --labels  # label check maps         -> maps/labels_*.html
+python scripts/candidate_sweep.py   # R/K miss-rate sweep (train) -> experiments/results/candidate_miss_rate.csv
+python scripts/build_candidates.py  # candidate tables           -> data/processed/candidates/, experiments/results/candidate_stats.csv
 ```
+
+Each stage runs in seconds on 8 cores (all trips in parallel, seed 148). The candidate tables (~30 MB) are committed, so you only need to rerun these if you change `configs/candidates.yaml` or `labels.py`. Decisions and their evidence: [`docs/data_quality_log.md`](docs/data_quality_log.md).
 
 More stages (candidates, features, model comparison, Bayesian optimisation, HMM tuning, artifact export, map generation) will be added under `scripts/`.
 
