@@ -1,0 +1,98 @@
+{
+  "features": [
+    "dist_m",
+    "dist_rank",
+    "dist_minus_min",
+    "dist_ratio_min",
+    "proj_frac",
+    "proj_outside",
+    "dist_from_node_m",
+    "dist_to_node_m",
+    "dist_over_len",
+    "heading_cos",
+    "heading_cos_prev",
+    "heading_cos_next",
+    "heading_valid",
+    "heading_cos_gap",
+    "ctx_mean_dist_m",
+    "ctx_max_dist_m",
+    "ctx_mean_gap_m",
+    "dt_prev_s",
+    "dt_next_s",
+    "speed_prev_mps",
+    "speed_next_mps",
+    "accel_mps2",
+    "turn_deg",
+    "arc_length_m",
+    "from_in_deg",
+    "from_out_deg",
+    "to_in_deg",
+    "to_out_deg",
+    "has_reverse",
+    "prev_rule_same",
+    "prev_rule_adjacent",
+    "next_rule_same",
+    "next_rule_adjacent",
+    "n_candidates",
+    "n_within_10m",
+    "n_within_25m"
+  ],
+  "groups": {
+    "distance": [
+      "dist_m",
+      "dist_rank",
+      "dist_minus_min",
+      "dist_ratio_min",
+      "proj_frac",
+      "proj_outside",
+      "dist_from_node_m",
+      "dist_to_node_m",
+      "dist_over_len"
+    ],
+    "direction": [
+      "heading_cos",
+      "heading_cos_prev",
+      "heading_cos_next",
+      "heading_valid",
+      "heading_cos_gap"
+    ],
+    "context": [
+      "ctx_mean_dist_m",
+      "ctx_max_dist_m",
+      "ctx_mean_gap_m"
+    ],
+    "motion": [
+      "dt_prev_s",
+      "dt_next_s",
+      "speed_prev_mps",
+      "speed_next_mps",
+      "accel_mps2",
+      "turn_deg"
+    ],
+    "network": [
+      "arc_length_m",
+      "from_in_deg",
+      "from_out_deg",
+      "to_in_deg",
+      "to_out_deg",
+      "has_reverse"
+    ],
+    "sequence": [
+      "prev_rule_same",
+      "prev_rule_adjacent",
+      "next_rule_same",
+      "next_rule_adjacent"
+    ],
+    "density": [
+      "n_candidates",
+      "n_within_10m",
+      "n_within_25m"
+    ]
+  },
+  "meta_columns": [
+    "trip_id",
+    "obs_idx",
+    "arc_id"
+  ],
+  "label_column": "label"
+}
