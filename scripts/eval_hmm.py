@@ -28,7 +28,6 @@ import pickle
 import sys
 import tempfile
 import time
-from functools import lru_cache
 from pathlib import Path
 
 import joblib
@@ -55,7 +54,7 @@ from pathsnap.io import discover_trips, load_trip  # noqa: E402
 from pathsnap.metrics import route_continuity, sequence_metrics  # noqa: E402
 from pathsnap.pipeline import argmax_per_obs, classifier_scorer  # noqa: E402
 
-GRID = {"classifier_weight": [0.5, 0.75, 1.0], "beta_m": [5.0, 10.0, 20.0, 50.0]}
+GRID = {"classifier_weight": [0.5, 0.75, 1.0], "beta_m": [1.0, 2.0, 3.0, 5.0, 10.0, 20.0, 50.0]}
 N_JOBS = max(1, (os.cpu_count() or 2) - 1)
 INK, MUTED, BLUE, ORANGE = "#1f2328", "#6e7781", "#2f6fb0", "#d9822b"
 
@@ -82,15 +81,13 @@ def prepare_trip(partition: str, files, scorer) -> dict:
             "route": None if route is None else np.asarray(route).ravel()}
 
 
-@lru_cache(maxsize=8)
 def _load(path: str) -> dict:
     with open(path, "rb") as f:
         return pickle.load(f)
 
 
-def decode(path: str, cfg: dict | None) -> tuple[np.ndarray, float]:
+def decode(d: dict, cfg: dict | None) -> tuple[np.ndarray, float]:
     """cfg None = classifier argmax; otherwise the HMM. Returns (pred, decode ms)."""
-    d = _load(path)
     t0 = time.perf_counter()
     if cfg is None:
         pred = argmax_per_obs(d["cands"], d["scores"], d["geom"].n_obs)
@@ -99,12 +96,12 @@ def decode(path: str, cfg: dict | None) -> tuple[np.ndarray, float]:
     return np.asarray(pred), (time.perf_counter() - t0) * 1000
 
 
-def score(path: str, pred: np.ndarray, ms: float) -> dict:
-    d = _load(path)
+def score(d: dict, pred: np.ndarray, ms: float) -> dict:
     ok = d["ok"]
     p = pred[pred >= 0]
     seq = p[np.r_[True, p[1:] != p[:-1]]] if len(p) else p
-    breaks = int(np.sum(d["arcs"].to_node.to_numpy()[p[:-1]] != d["arcs"].from_node.to_numpy()[p[1:]])) if len(p) > 1 else 0
+    ch = np.flatnonzero(p[1:] != p[:-1]) if len(p) > 1 else np.array([], int)  # arc changes only
+    breaks = int(np.sum(d["arcs"].to_node.to_numpy()[p[ch]] != d["arcs"].from_node.to_numpy()[p[ch + 1]]))
     out = {"trip_id": d["trip_id"], "n_obs": int(ok.sum()), "n_correct": int((pred == d["label"])[ok].sum()),
            "continuity": route_continuity(pred, d["arcs"]), "breaks": breaks, "decode_ms": ms}
     if d["route"] is not None:
@@ -118,8 +115,9 @@ def run(paths: list[str], cfgs: dict[str, dict | None], desc: str) -> pd.DataFra
     tasks.sort(key=lambda t: -os.path.getsize(t[1]))
 
     def job(key, p):
-        pred, ms = decode(p, cfgs[key])
-        return {"variant": key, **score(p, pred, ms)}
+        d = _load(p)  # one load per task; workers get only the path
+        pred, ms = decode(d, cfgs[key])
+        return {"variant": key, **score(d, pred, ms)}
 
     rows = []
     gen = Parallel(n_jobs=N_JOBS, return_as="generator_unordered")(delayed(job)(k, p) for k, p in tasks)
@@ -144,15 +142,22 @@ def main(argv: list[str]) -> int:
     base = hmm.load_hmm_config()
     meta = json.loads(repo_path("artifacts/metadata.json").read_text())
     name = meta["model"]
-    tmp = Path(tempfile.mkdtemp(prefix="hmm_eval_"))
+    # --prep-dir DIR reuses the out-of-fold train scores of an earlier run (train_*.pkl)
+    prep = argv[argv.index("--prep-dir") + 1] if "--prep-dir" in argv else None
+    tmp = Path(prep) if prep else Path(tempfile.mkdtemp(prefix="hmm_eval_"))
+    print(f"working dir {tmp}")
 
     # 1. out-of-fold train scores
     tr, _ = load_split("train")
     fold_of = cv_folds(tr["trip_id"])
     trips = discover_trips("train")
-    train_paths = []
+    train_paths = sorted(str(p) for p in tmp.glob("train_*.pkl")) if prep else []
     folds = sorted(set(fold_of.values()))
-    with tqdm(total=len(folds) + len(trips), desc=f"OOF scores ({name})", unit="step", dynamic_ncols=True) as bar:
+    if len(train_paths) == len(trips):
+        print(f"reusing {len(train_paths)} out-of-fold train trips from {tmp}")
+    else:
+      train_paths = []
+      with tqdm(total=len(folds) + len(trips), desc=f"OOF scores ({name})", unit="step", dynamic_ncols=True) as bar:
         for k in folds:
             bar.set_postfix_str(f"fit without fold {k}")
             est, _ = build_from_script(name)
@@ -188,7 +193,7 @@ def main(argv: list[str]) -> int:
         p.write_bytes(pickle.dumps(prepare_trip("student_test", f, scorer)))
         st_paths.append(str(p))
     variants = {"classifier argmax (no HMM)": None,
-                f"HMM placeholder config (w={base['emission']['classifier_weight']:g}, beta={base['transition']['beta_m']:g})": base,
+                f"HMM config before this run (w={base['emission']['classifier_weight']:g}, beta={base['transition']['beta_m']:g})": base,
                 f"HMM distance-only (w=0, beta={bb:g})": cfg_with(base, 0.0, bb),
                 f"HMM tuned on train (w={bw:g}, beta={bb:g})": cfg_with(base, bw, bb)}
     st = run(st_paths, variants, "student_test variants")
@@ -227,7 +232,17 @@ def main(argv: list[str]) -> int:
         header = ("# HMM / Viterbi decoder parameters. classifier_weight and beta_m were tuned by\n"
                   "# scripts/eval_hmm.py: grid on the 80 TRAIN trips with out-of-fold classifier scores\n"
                   "# (experiments/results/hmm_grid.csv). Never tuned on evaluator trips.\n")
-        (CONFIG_DIR / "hmm.yaml").write_text(header + yaml.safe_dump(cfg, sort_keys=False))
+        comments = {"prob_floor:": "epsilon so log(p) never becomes -inf",
+                    "distance_sigma_m:": "Gaussian GPS-noise term, if blended with classifier probs",
+                    "classifier_weight:": "1.0 = classifier scores only; 0.0 = distance only (tuned)",
+                    "beta_m:": "scale of |network distance - straight-line distance| (tuned)",
+                    "max_route_factor:": "Dijkstra cutoff = factor * straight-line + slack",
+                    "break_seconds:": "split the HMM when consecutive points are this far apart in time"}
+        lines = []
+        for line in yaml.safe_dump(cfg, sort_keys=False).splitlines():
+            key = line.strip().split(" ")[0]
+            lines.append(f"{line:<26} # {comments[key]}" if key in comments else line)
+        (CONFIG_DIR / "hmm.yaml").write_text(header + "\n".join(lines) + "\n")
         print(f"configs/hmm.yaml updated: classifier_weight={bw:g}, beta_m={bb:g}")
     print(f"total {(time.perf_counter() - t_all) / 60:.1f} min")
     return 0

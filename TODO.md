@@ -1,73 +1,46 @@
 # TODO: what is left
 
-Status as of 2026-11-18, after PRs #6 and #7 were merged (`main` at `ec042b5`). Tick items off here in your own PRs so this file stays the single source of truth. Requirements: [`docs/PLAN.md`](docs/PLAN.md); team split: [`SPLIT.md`](SPLIT.md).
+Status as of 2026-11-18 ~17:00, with PR #9 (`feat/hmm-integration`). Tick items off here in your own PRs so this file stays the single source of truth. Requirements: [`docs/PLAN.md`](docs/PLAN.md); team split: [`SPLIT.md`](SPLIT.md).
 
-**Overall: about 85% of the engineering and about 70% of the whole project.** All required ML work exists in code (models, tuning, HMM). What remains is merging Sudhe's branch, tuning and reporting the HMM, the two-laptop demo, and above all the **report**, which is the long pole: start it now, in parallel. Nothing of the PDF exists yet beyond fact sheets.
+**Overall: about 95%.** All the ML work is done and reported. What is left is the **two-laptop run on the real machines** (with screenshots for report section 7), a read-through of the report, and the mock viva.
+
+**Best result (student_test, end to end through the API code path): Top-1 0.913**, continuity 0.930, route breaks 259 (classifier alone 0.880 / 0.867 / 653; rule baseline 0.832).
 
 ## Done
 
 - [x] Inventory, EDA, data-quality log, Folium maps + screenshots (`docs/data_quality_log.md`, `maps/`, `report/figures/`)
-- [x] Derived labels (monotonic DP) with quality checks and check maps
-- [x] Candidate generation; R = 60 m, K = 30 chosen by miss rate on train
-- [x] Feature table (36 features, `artifacts/feature_list.json`) and notebooks 00-02
-- [x] Shared harness (`src/pathsnap/harness.py`) + comparison table (`experiments/results/model_comparison.csv`)
-- [x] 7 models evaluated (≥ 5 required): XGBoost, LightGBM, LightGBM tuned, HistGB, Logistic Regression, SGD, Gaussian NB
-- [x] **Bayesian optimisation** (PR #6): 40-trial Optuna study, every trial saved, untuned vs tuned table; CV Top-1 0.8639 → 0.8651 (`report/notes_advitha.md`)
-- [x] **Tuned LightGBM exported** (PR #6) and served by the API; end to end student_test Top-1 0.880, ~0.2 s per trip
-- [x] Figures: `cv_macro_f1.png`, `confusion_matrices.png`, `bayes_opt_history.png`, `bayes_opt_importance.png`
-- [x] Final-model justification: facts + talking points in `report/notes_advitha.md`
-- [x] FastAPI + Streamlit UI serving the trained model; separate student-test and evaluator API workflows (PR #7)
-- [x] **Evaluator trips received** and placed in `data/raw/evaluator/` (gitignored; read only by the API with `PATHSNAP_MODE=serve`). `smoke_test_api.py`: **10/10 trips pass** on one laptop, each < 1 s
-- [x] Report maps (reference vs predicted), error analysis, fact sheet `report/notes_adyanth.md`
+- [x] Derived labels (monotonic DP) with quality checks; candidates R = 60 m, K = 30 chosen on train
+- [x] Feature table (36 features), shared harness, notebooks 00-02
+- [x] **10 models** through the same harness (≥ 5 required): LightGBM, LightGBM tuned, XGBoost, HistGB, Random Forest, Extra Trees, Decision Tree, Logistic Regression, SGD, Gaussian NB (`experiments/results/model_comparison.csv`)
+- [x] **Bayesian optimisation**: 40-trial Optuna study, every trial saved, untuned vs tuned table (PR #6)
+- [x] **Tuned LightGBM exported** and served by the API
+- [x] **HMM/Viterbi** (Sudhe) merged, tuned on train with out-of-fold scores (`configs/hmm.yaml`), classifier vs HMM table + per-trip + failure analysis (`scripts/eval_hmm.py`, `experiments/results/hmm_*.csv`)
+- [x] Figures: CV macro F1 with folds, confusion matrices, model comparison, Bayes-opt history/importance, HMM per-trip
+- [x] **API**: evaluator endpoints score point Top-1, miss rate, route P/R/F1, continuity on the server after prediction; scores printed in the Laptop 1 log
+- [x] **UI** lists the 10 evaluator trips by default (student-test as practice mode)
+- [x] `smoke_test_api.py` targets the evaluator endpoints
+- [x] **PDF report** `report/report.pdf`, generated from the results by `python report/build_report.py` (every table read from `experiments/results/`); AI use disclosed in section 8
 
-## Pushed, not merged
+## Left
 
-- [ ] **`feat/sudhe-hmm`**: HMM/Viterbi decoder + tests, pipeline wiring, `metrics.py` + tests, Random Forest, and (latest push) `scripts/eval_hmm.py` plus Extra Trees and Decision Tree scripts on the shared trainer. Checked in an earlier trial merge: 40 tests pass, and on student_test the HMM lifts Top-1 0.880 → **0.902**, continuity 0.867 → **0.931**, breaks 653 → **253**; better on 9/10 trips (trip 9 slightly worse: 0.864 → 0.856). One conflict in the `return` block of `src/pathsnap/pipeline.py`: keep both sides (`decoder_breaks` from the branch, `scorer_name` from main). The Extra Trees / Decision Tree / HMM comparison *results* are not committed yet, only the scripts. Sudhe to finish pushing, then open a PR.
-
-## Left, in priority order
-
-| # | Task | Owner | Status | Rough time |
+| # | Task | Owner | Status | Time |
 |---|---|---|---|---|
-| 1 | Merge Sudhe's branch (conflict fix above); re-run `eval_pipeline.py` and the smoke test with the HMM on | Adyanth | ⏳ waiting for Sudhe's PR (PR #6 is merged) | 15 min |
-| 2 | **Tune `configs/hmm.yaml`** (still placeholders) on train/student_test only, never evaluator | Sudhe | ❌ | 1 h |
-| 3 | **Classifier-only vs HMM table** + failure cases (trip 9) + latency cost (HMM ~1.6 s per trip, max 3.5 s vs 0.2 s). `eval_pipeline.py` needs a `model_hmm` variant (`load_artifacts()` with the decoder) | Sudhe | ⚠️ numbers above from the trial merge | 1 h |
-| 4 | Remaining models: run **Extra Trees, Decision Tree** and commit their results (Sudhe; scripts pushed, RF done). **KNN, MLP** (Tilak) are optional now that 7 models exist (≥ 5 required); do them only if time allows, and only the MLP gives real epoch loss curves. | Sudhe, Tilak | ⚠️ scripts only | 1-2 h |
-| 5 | Use `metrics.py` in `api/evaluation.py` (UI shows Top-1 / miss rate as `None`) | Tilak (+ Adyanth) | ❌ needs Sudhe's merge | 30 min |
-| 6 | **Two-laptop test** on all 10 evaluator trips over the real network (hotspot as backup); API terminal log + UI screenshots for the report. Unzip `evaluator_test.zip` into `data/raw/evaluator/` on the API laptop. Re-run after the HMM is merged. | Tilak | ⚠️ one-laptop smoke test passes (10/10) | 30-60 min |
-| 7 | **PDF report** (sections 2.2-8), each person writes their own sections in their own words (AI-text checks). Facts: `report/notes_adyanth.md`, `report/notes_advitha.md`; Sudhe and Tilak need their own fact sheets | everyone | ❌ | **several hours** |
-| 8 | README final pass, AI-use disclosure check (`docs/AI_USE.md`), branch protection on `main` | anyone | ⚠️ | 20 min |
-| 9 | Mock viva: everyone explains every part (checklists at the end of each `report/notes_*.md`) | everyone | ❌ | 1 h |
-
-## Who does what now
-
-| Person | Items |
-|---|---|
-| Sudhe | open the PR; 2, 3, 4 (commit ET/DT results); fact sheet for the HMM section |
-| Tilak | 5, 6; 4 (KNN/MLP) only if time allows; fact sheet for the deployment section |
-| Advitha | report sections 3.1-3.3 and 4 from `report/notes_advitha.md`; viva checklist |
-| Adyanth | 1 (merges), own report sections, help with 5, check numbers in report drafts |
-| Everyone | 7, 8, 9 |
+| 1 | Merge PR #9 with **"Create a merge commit"** (keeps Sudhe's authorship) | Adyanth | ⏳ | 2 min |
+| 2 | **Two-laptop run** on the real laptops: Laptop 1 = API (full repo + `data/raw/evaluator/` from `evaluator_test.zip`), Laptop 2 = UI. `curl http://<ip>:8000/health` from Laptop 2 first; phone hotspot if campus Wi-Fi blocks it. Run `python scripts/smoke_test_api.py` on Laptop 1 (expect 10/10) | Tilak + Adyanth | ❌ | 30 min |
+| 3 | Screenshots from that run: UI showing an evaluator trip → `report/figures/ui_evaluator.png`; API terminal on Laptop 1 → `report/figures/api_terminal.png`; then `python report/build_report.py` | Tilak | ❌ | 10 min |
+| 4 | Read the report end to end; fix anything you would not say in the viva | everyone | ❌ | 30 min |
+| 5 | README final pass, branch protection on `main` | anyone | ⚠️ | 15 min |
+| 6 | Mock viva: everyone explains every part (checklists in `report/notes_*.md`) | everyone | ❌ | 1 h |
+| - | Optional: KNN / MLP (MLP would add real epoch loss curves). Not needed: 10 models exist | Tilak | optional | 1-2 h |
 
 ## Rules that still apply
 
 - **Evaluator trips:** no training, tuning, threshold or decoder choice on them; never commit them (`data/raw/evaluator/**` is gitignored). Don't look at evaluator scores before the demo.
-- Every number in the report must come from a file in `experiments/results/` and be reproducible from the README run order.
+- Every number in the report comes from a file in `experiments/results/`; rebuild the PDF after any re-run.
 
-## How to plug things in (no code changes elsewhere needed)
+## How to plug things in
 
-- **New model:** `scripts/models/<you>_<model>.py` with `build()` + `CONFIG`, calling `pathsnap.harness.evaluate_model(...)`; then `python scripts/cv_compare.py`. Slow models: `max_train_obs=`.
-- **HMM:** `make_decoder(config)` in `src/pathsnap/hmm.py`; `pipeline.load_artifacts()` and the API pick it up. Student_test probabilities for offline tuning: `data/processed_local/preds/<model>_student_test.parquet`.
+- **New model:** `scripts/models/<you>_<model>.py` with `build()` + `CONFIG`, calling `pathsnap.harness.evaluate_model(...)`; then `python scripts/cv_compare.py`.
 - **Re-export:** `python scripts/export_artifacts.py [name]`, then `python scripts/eval_pipeline.py`.
-
-## Remaining effort at a glance
-
-| Block | Left |
-|---|---|
-| Merge HMM, re-run end to end | ~15 min (after Sudhe's PR) |
-| Tune and report the HMM | ~2 h (Sudhe) |
-| API metrics + two-laptop demo | ~1-1.5 h (Tilak) |
-| README, disclosure, branch protection | ~20 min |
-| **PDF report** | **several hours, split across four people** |
-| Mock viva | ~1 h |
-
-The ML is done. The remaining risk is the report and the live demo, not the models.
+- **HMM:** `python scripts/eval_hmm.py` re-tunes `configs/hmm.yaml` on train (`--prep-dir DIR` reuses out-of-fold scores).
+- **Report:** `python report/build_report.py` (needs `xelatex`).

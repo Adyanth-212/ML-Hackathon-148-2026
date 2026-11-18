@@ -1,12 +1,13 @@
-# HMM / Viterbi decoder parameters. PLACEHOLDERS: tune on training and
-# student-test trips only (never on evaluator trips).
+# HMM / Viterbi decoder parameters. classifier_weight and beta_m were tuned by
+# scripts/eval_hmm.py: grid on the 80 TRAIN trips with out-of-fold classifier scores
+# (experiments/results/hmm_grid.csv). Never tuned on evaluator trips.
 emission:
-  prob_floor: 1.0e-6     # epsilon so log(p) never becomes -inf
-  distance_sigma_m: 10.0 # Gaussian GPS-noise term, if blended with classifier probs
-  classifier_weight: 1.0 # 1.0 = classifier scores only; 0.0 = distance only
+  prob_floor: 1.0e-06      # epsilon so log(p) never becomes -inf
+  distance_sigma_m: 10.0   # Gaussian GPS-noise term, if blended with classifier probs
+  classifier_weight: 1.0   # 1.0 = classifier scores only; 0.0 = distance only (tuned)
 transition:
-  beta_m: 20.0           # scale of |network distance - straight-line distance|
-  max_route_factor: 2.0  # Dijkstra cutoff = factor * straight-line + slack
+  beta_m: 3.0              # scale of |network distance - straight-line distance| (tuned)
+  max_route_factor: 2.0    # Dijkstra cutoff = factor * straight-line + slack
   route_slack_m: 200.0
 gaps:
-  break_seconds: 30.0    # split the HMM when consecutive points are this far apart in time
+  break_seconds: 30.0      # split the HMM when consecutive points are this far apart in time

@@ -4,6 +4,8 @@ UE24CS352A Machine Learning hackathon, team 148.
 
 PathSnap matches noisy GPS trajectories to a road network. It generates candidate road segments for every GPS point, scores them with a trained classifier, and decodes a connected route with an HMM/Viterbi decoder. A FastAPI server (Laptop 1) runs the pipeline. A Streamlit UI (Laptop 2) lets the evaluator pick a trip and see the result.
 
+**Results: [RESULTS.md](RESULTS.md)** — every model we tried and its accuracy in one table. Final pipeline: **91.3%** of GPS points on the correct road (held-out student-test trips). Full report: [`report/report.pdf`](report/report.pdf).
+
 > **Team split and workflow: see [SPLIT.md](SPLIT.md). What is left: see [TODO.md](TODO.md). Data, preprocessing and features: see [REFERENCE.md](REFERENCE.md).**
 >
 > **Status (Review 1):** data foundation, EDA, maps, labels, candidates, feature table, shared evaluation harness and five classifiers are done (`experiments/results/model_comparison.csv`). `pipeline.predict_trip` works end to end with a rule-based scorer. Still to do: Bayesian optimisation, HMM/Viterbi, model export into the pipeline, the remaining models (RF/ET/DT, KNN/MLP), API/UI integration and the report.
@@ -73,9 +75,11 @@ python scripts/optimize.py             # Bayesian optimisation of LightGBM (Optu
 python scripts/models/advitha_lgbm_tuned.py  # tuned LightGBM through the harness
 python scripts/compare_tuning.py         # untuned vs tuned        -> experiments/results/tuning_comparison.csv
 python scripts/cv_compare.py             # comparison table + figures -> experiments/results/model_comparison.csv, experiments/figures/{model_comparison,cv_macro_f1,confusion_matrices}.png
+python scripts/eval_hmm.py              # HMM decoder tuned on train (out-of-fold scores) + classifier vs HMM -> configs/hmm.yaml, experiments/results/hmm_*.csv
 python scripts/export_artifacts.py       # selected model (best CV Top-1) -> artifacts/model.joblib, metadata.json
 python scripts/eval_pipeline.py          # predict_trip end to end on student_test -> experiments/results/pipeline_*.csv
 python scripts/make_maps.py --predicted  # report maps: reference vs predicted route -> maps/predicted_*.html
+python report/build_report.py           # final PDF from the results -> report/report.pdf (needs xelatex)
 ```
 
 **Adding a model:** write `scripts/models/<you>_<model>.py` that builds an sklearn-compatible estimator (scalers inside a `Pipeline`) and calls `pathsnap.harness.evaluate_model(name, family, estimator, config)`. The harness fixes the data, the folds (`experiments/results/cv_folds.csv`), the metrics and the output format, so every model is comparable. For slow models pass `max_train_obs=` to subsample training observations (recorded in the JSON).
