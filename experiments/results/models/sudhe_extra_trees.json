@@ -1,0 +1,69 @@
+{
+  "name": "sudhe_extra_trees",
+  "family": "tree ensemble",
+  "config": {
+    "n_estimators": 120,
+    "max_depth": 18,
+    "min_samples_leaf": 2,
+    "class_weight": "balanced",
+    "random_state": 148,
+    "n_jobs": -1
+  },
+  "seed": 148,
+  "status": "development evaluation; 5-fold GroupKFold by trip_id and held-out student_test",
+  "features": [
+    "dist_m",
+    "proj_frac",
+    "dist_rank",
+    "dist_minus_min",
+    "proj_outside",
+    "n_candidates"
+  ],
+  "train_rows": 2051187,
+  "student_test_rows": 244096,
+  "cv": {
+    "folds": [
+      {
+        "fold": 1,
+        "macro_f1": 0.7706007423030461,
+        "top1": 0.5814872690504642,
+        "fit_seconds": 45.02757550000024
+      },
+      {
+        "fold": 2,
+        "macro_f1": 0.7716466042732919,
+        "top1": 0.5445006059531199,
+        "fit_seconds": 37.7897045000027
+      },
+      {
+        "fold": 3,
+        "macro_f1": 0.7717089291775467,
+        "top1": 0.5428243465975983,
+        "fit_seconds": 44.38216639999882
+      },
+      {
+        "fold": 4,
+        "macro_f1": 0.7769284187950113,
+        "top1": 0.5493468071668384,
+        "fit_seconds": 36.3657355999967
+      },
+      {
+        "fold": 5,
+        "macro_f1": 0.7739361315461729,
+        "top1": 0.5177895361036354,
+        "fit_seconds": 49.38430470000094
+      }
+    ],
+    "macro_f1_mean": 0.7729641652190138,
+    "macro_f1_std": 0.0022608572357029006
+  },
+  "student_test": {
+    "top1_accuracy": 0.5413160508022787,
+    "precision": 0.44171466064008164,
+    "recall": 0.9500339727172947,
+    "macro_f1": 0.7735611741994411,
+    "log_loss": 0.237534325936463
+  },
+  "fit_seconds": 70.99581380000018,
+  "total_seconds": 290.6953730999994
+}
