@@ -32,3 +32,15 @@ def test_fill_missing_nearest_in_time():
     pred = np.array([-1, 3, -1, -1, 7, -1])
     t = np.array([0, 1, 2, 5, 6, 9.0])
     assert fill_missing(pred, t).tolist() == [3, 3, 3, 7, 7, 7]
+
+
+def test_exported_model_runs_in_pipeline():
+    from pathsnap.pipeline import load_artifacts
+
+    art = load_artifacts()
+    if not art:  # no exported model in this checkout
+        return
+    trip = load_trip(discover_trips("train", root=TOY)["toy01"])
+    res = predict_trip(trip, art)
+    assert res["method"]["scorer"] == art["metadata"]["model"]
+    assert len(res["pred_arcs"]) == 5 and min(res["pred_arcs"]) >= 0

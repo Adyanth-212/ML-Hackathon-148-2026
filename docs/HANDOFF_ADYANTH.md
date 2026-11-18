@@ -13,7 +13,10 @@ Branch `feat/adyanth-data`. Everything below runs from a clean clone after `pip 
 | Label maps | `scripts/make_maps.py --labels` | `maps/labels_*.html` (7 trips) | ~10 s |
 | R/K sweep | `scripts/candidate_sweep.py` | `experiments/results/candidate_miss_rate.csv`, figure | ~2 s |
 | Candidates | `src/pathsnap/candidates.py`, `scripts/build_candidates.py` | `data/processed/candidates/<part>/<trip>.parquet`, `experiments/results/candidate_stats.csv` | ~1.5 s |
-| LogReg / GNB | `scripts/models/adyanth_{logreg,gnb}.py` via `pathsnap.harness` | `experiments/results/models/adyanth_*.json`, `ablation_*.json` | ~90 s / ~10 s |
+| LogReg / GNB / SGD | `scripts/models/adyanth_{logreg,gnb,sgd}.py` via `pathsnap.harness` | `experiments/results/models/adyanth_*.json`, `ablation_*.json` | ~90 s / ~10 s / ~40 s |
+| Export selected model | `scripts/export_artifacts.py [model_name]` | `artifacts/model.joblib`, `artifacts/metadata.json` | ~15 s |
+| Pipeline evaluation | `scripts/eval_pipeline.py` | `experiments/results/pipeline_*.csv` | ~2 s |
+| Report maps | `scripts/make_maps.py --predicted` | `maps/predicted_student_test_*.html`, `report/figures/map_predicted_*.png` | ~5 s |
 
 Geometry helper for everyone: `pathsnap.geo.TripGeometry(track, nodes, arcs)` projects one trip to its UTM zone once and exposes `obs_x/obs_y`, `node_x/node_y`, arc endpoints `ax, ay, bx, by`, `arc_lengths()`, `obs_arc_distance(obs, arcs)` and `distance_matrix(arc_ids)`.
 
@@ -33,13 +36,13 @@ At inference time call `generate_candidates(TripGeometry.from_trip(trip), trip_i
 - Candidates: mean 11.75 per point (train), 12.74 (student_test). Miss rate on reliable labels: train 0.029%, student_test 0.000%; all points: 6.46% / 0.13%.
 - Models: the prototype in `scripts/models/_adyanth_proto.py` has been replaced by the shared harness (`src/pathsnap/harness.py`). Current results for LogReg, GNB, the boosting models and the feature-group ablations are in `experiments/results/model_comparison.csv` and [`docs/HANDOFF_FEATURES_HARNESS.md`](HANDOFF_FEATURES_HARNESS.md). Key finding, unchanged: distance-only features give no more than the nearest-arc rule (Top-1 ~0.54); direction features add ~0.30.
 
-## Baseline pipeline (works now)
+## Pipeline (works now, with the trained model)
 
-`pathsnap.pipeline.predict_trip(trip, artifacts=None)` returns `{"gps", "pred_arcs", "route_lonlat", "timings_ms", "no_candidate_obs", "method"}`. It never takes a route.
-- `artifacts=None` gives the baseline rule: `score = -(dist_m + 20 m * heading mismatch)`, with the 20 m weight chosen on train (`scripts/eval_baseline.py`). Student_test Top-1 is 0.832 (nearest arc alone: 0.530), continuity 0.73, ~21 ms per trip.
-- `artifacts["scorer"](geom, cands) -> np.ndarray` (higher = better, e.g. `predict_proba[:, 1]` on your features) replaces the rule.
-- `artifacts["decoder"](geom, cands, scores) -> arc per observation` replaces the argmax (Sudhe's Viterbi).
-- **Tilak:** `api/main.py` already calls `predict_trip(trip, ARTIFACTS)` with `ARTIFACTS = None`, so `/predict` now returns a real route instead of a 501.
+`pathsnap.pipeline.predict_trip(trip, artifacts)` returns `{"gps", "pred_arcs", "route_lonlat", "timings_ms", "no_candidate_obs", "method"}`. It never takes a route.
+- `artifacts = load_artifacts()` loads `artifacts/model.joblib` (currently LightGBM, chosen by best CV Top-1) and scores candidates with `features.build_features`. Student_test Top-1 is 0.879 with continuity 0.867, at ~77 ms per trip (`experiments/results/pipeline_summary.csv`).
+- `artifacts = None` (or `{}`) uses the rule-based baseline: distance + 20 m × heading mismatch, Top-1 0.832.
+- **HMM hook (Sudhe):** if `pathsnap.hmm` defines `make_decoder(config: dict)` returning `decoder(geom, cands, scores) -> np.ndarray` (one arc id per observation), `load_artifacts()` picks it up automatically with `configs/hmm.yaml`. `scores` are the classifier probabilities in candidate-row order.
+- **Tilak (API):** nothing to change. `api/main.py`'s own loader returns `{"mode": "classifier", "model": est}`, and `predict_trip` wraps that `model` in the same feature-based scorer (checked: identical predictions to `pipeline.load_artifacts()`). The response keeps every field the UI uses (`route_arc_ids`, `network_lonlat`, `nearest_dist_m`, `model`, `timings_ms.total`). Re-export after Bayesian tuning with `python scripts/export_artifacts.py <tuned_model_name>`.
 
 ## For the others
 
@@ -52,4 +55,4 @@ At inference time call `generate_candidates(TripGeometry.from_trip(trip), trip_i
 
 - The reference route covers only part of the track in a few trips; those labels are flagged, not fixed.
 - Top-1 counts an observation without a positive candidate (a miss) as wrong; at R = 60 m / K = 30 this is negligible on reliable labels.
-- `pipeline.predict_trip` now runs a rule-based baseline (nearest arc + heading penalty, student_test Top-1 0.832). The trained model and the HMM still need to be plugged in as `artifacts["scorer"]` / `artifacts["decoder"]`.
+- The pipeline runs the exported classifier; the HMM plugs in through `hmm.make_decoder` (above). About 81% of the reverse-twin "errors" whose heading can be trusted look like label errors in the reference route (data_quality_log section 10).

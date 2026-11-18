@@ -3,6 +3,7 @@
     python scripts/make_maps.py                 # default showcase trips
     python scripts/make_maps.py 00000024 ...    # any train / student_test trip ids
     python scripts/make_maps.py --labels        # label-check maps (needs scripts/build_labels.py first)
+    python scripts/make_maps.py --predicted     # report maps: reference vs predicted route (student_test)
 
 Trips are chosen to cover the cases found in EDA (see docs/data_quality_log.md).
 Only arcs with an end node within 200 m of the track are drawn so the HTML stays small.
@@ -52,6 +53,12 @@ def make_map(trip_id: str, partition: str, note: str = "") -> str:
 
 
 def main(argv: list[str]) -> int:
+    if argv[:1] == ["--predicted"]:
+        from pathsnap.pipeline import load_artifacts
+        art = load_artifacts(use_decoder=False)
+        for tid, note in PREDICTED_SHOWCASE.items():
+            make_predicted_map(tid, art, note)
+        return 0
     if argv[:1] == ["--labels"]:
         for tid, (part, note) in LABEL_SHOWCASE.items():
             make_label_map(tid, part, note)
@@ -119,6 +126,57 @@ def make_label_map(trip_id: str, partition: str, note: str = "") -> str:
 def arc_segments(trip, arc_ids):
     from pathsnap.viz import arc_segments_lonlat
     return arc_segments_lonlat(trip.nodes, trip.arcs, np.asarray(arc_ids))
+
+
+PREDICTED_SHOWCASE = {  # student_test trips, picked from experiments/results/pipeline_student_test.csv
+    "00000007": "best trip",
+    "00000040": "typical trip",
+    "00000056": "longest trip (3,958 points)",
+    "00000077": "worst trip",
+}
+
+
+def make_predicted_map(trip_id: str, artifacts: dict, note: str = "", partition: str = "student_test") -> str:
+    """Report map: raw GPS, nearby network, reference route (green) and predicted route (red).
+
+    Offline only, on student_test: the reference route is drawn here for the report and is never
+    sent to the UI. GPS points whose predicted arc differs from the derived label are orange.
+    """
+    import pandas as pd
+
+    from pathsnap.pipeline import predict_trip
+    from pathsnap.viz import OUTLIER_COLOR, PRED_COLOR
+
+    trip = load_trip(discover_trips(partition)[trip_id], with_route=False)
+    res = predict_trip(trip, artifacts)  # no route in the prediction
+    route = load_trip(discover_trips(partition)[trip_id], with_route=True).route
+    lab = pd.read_parquet(repo_path(f"data/processed/labels/{partition}/{trip_id}.parquet"))
+    pred = np.asarray(res["pred_arcs"])
+    ok = ~lab.is_outlier.to_numpy()
+    right = pred == lab.arc_id.to_numpy()
+    top1 = float(right[ok].mean())
+
+    lon, lat = trip.track.lon.to_numpy(), trip.track.lat.to_numpy()
+    m = base_map(float(np.median(lat)), float(np.median(lon)))
+    add_network_layer(m, trip.nodes, trip.arcs, arcs_near_track(trip.nodes, trip.arcs, lon, lat, 200), show=True)
+    add_route_layer(m, trip.nodes, trip.arcs, route, name=f"Reference route ({len(route)} arcs)", weight=8)
+    fg = folium.FeatureGroup(name="Predicted route (classifier)").add_to(m)
+    folium.PolyLine([(la, lo) for lo, la in res["route_lonlat"]], color=PRED_COLOR, weight=3, opacity=0.9).add_to(fg)
+    colors = [GPS_COLOR if r else OUTLIER_COLOR for r in right]
+    tips = [f"obs {i}: predicted arc {p}, label arc {a}" for i, (p, a) in enumerate(zip(pred, lab.arc_id))]
+    add_gps_layer(m, trip.track, name="GPS (orange = predicted arc differs from label)", colors=colors,
+                  tooltips=tips, radius=2.5)
+    folium.LayerControl(collapsed=False).add_to(m)
+    add_legend(m, [("Reference route", ROUTE_COLOR), ("Predicted route", PRED_COLOR),
+                   ("GPS, predicted arc = label", GPS_COLOR), ("GPS, predicted arc differs", OUTLIER_COLOR),
+                   ("Road network (within 200 m)", NETWORK_COLOR)],
+               title=f"{partition} trip {trip_id}: {res['method']['scorer']}<br><span style='font-weight:normal'>"
+                     f"{note}; Top-1 {top1:.3f} (reliable labels)</span>")
+    fit_to(m, lon, lat)
+    out = repo_path(f"maps/predicted_{partition}_{trip_id}.html")
+    m.save(str(out))
+    print(f"{out}  ({out.stat().st_size / 1e6:.1f} MB, Top-1 {top1:.3f})")
+    return str(out)
 
 
 if __name__ == "__main__":

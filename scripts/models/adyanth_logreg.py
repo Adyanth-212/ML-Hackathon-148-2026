@@ -17,7 +17,7 @@ CONFIG = {"C": 1.0, "penalty": "l2", "class_weight": "balanced", "solver": "lbfg
           "scaler": "standard"}
 
 
-def make():
+def build():
     return Pipeline([("scale", StandardScaler()),
                      ("clf", LogisticRegression(C=CONFIG["C"], class_weight=CONFIG["class_weight"],
                                                 solver=CONFIG["solver"], max_iter=CONFIG["max_iter"],
@@ -25,10 +25,10 @@ def make():
 
 
 if __name__ == "__main__":
-    evaluate_model("adyanth_logreg", "linear / probabilistic", make(), CONFIG)
+    evaluate_model("adyanth_logreg", "linear / probabilistic", build(), CONFIG)
     dist = FEATURE_GROUPS["distance"] + FEATURE_GROUPS["density"]
-    evaluate_model("ablation_logreg_distance", "linear / probabilistic (ablation)", make(),
+    evaluate_model("ablation_logreg_distance", "linear / probabilistic (ablation)", build(),
                    {**CONFIG, "feature_groups": ["distance", "density"]}, features=dist)
-    evaluate_model("ablation_logreg_distance_direction", "linear / probabilistic (ablation)", make(),
+    evaluate_model("ablation_logreg_distance_direction", "linear / probabilistic (ablation)", build(),
                    {**CONFIG, "feature_groups": ["distance", "density", "direction"]},
                    features=dist + FEATURE_GROUPS["direction"])
