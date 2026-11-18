@@ -54,7 +54,7 @@ from pathsnap.io import discover_trips, load_trip  # noqa: E402
 from pathsnap.metrics import route_continuity, sequence_metrics  # noqa: E402
 from pathsnap.pipeline import argmax_per_obs, classifier_scorer  # noqa: E402
 
-GRID = {"classifier_weight": [0.5, 0.75, 1.0], "beta_m": [5.0, 10.0, 20.0, 50.0]}
+GRID = {"classifier_weight": [0.5, 0.75, 1.0], "beta_m": [1.0, 2.0, 3.0, 5.0, 10.0, 20.0, 50.0]}
 N_JOBS = max(1, (os.cpu_count() or 2) - 1)
 INK, MUTED, BLUE, ORANGE = "#1f2328", "#6e7781", "#2f6fb0", "#d9822b"
 
@@ -193,7 +193,7 @@ def main(argv: list[str]) -> int:
         p.write_bytes(pickle.dumps(prepare_trip("student_test", f, scorer)))
         st_paths.append(str(p))
     variants = {"classifier argmax (no HMM)": None,
-                f"HMM placeholder config (w={base['emission']['classifier_weight']:g}, beta={base['transition']['beta_m']:g})": base,
+                f"HMM config before this run (w={base['emission']['classifier_weight']:g}, beta={base['transition']['beta_m']:g})": base,
                 f"HMM distance-only (w=0, beta={bb:g})": cfg_with(base, 0.0, bb),
                 f"HMM tuned on train (w={bw:g}, beta={bb:g})": cfg_with(base, bw, bb)}
     st = run(st_paths, variants, "student_test variants")

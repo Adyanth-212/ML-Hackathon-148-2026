@@ -4,6 +4,8 @@ UE24CS352A Machine Learning hackathon, team 148.
 
 PathSnap matches noisy GPS trajectories to a road network. It generates candidate road segments for every GPS point, scores them with a trained classifier, and decodes a connected route with an HMM/Viterbi decoder. A FastAPI server (Laptop 1) runs the pipeline. A Streamlit UI (Laptop 2) lets the evaluator pick a trip and see the result.
 
+**Results: [RESULTS.md](RESULTS.md)** — every model we tried and its accuracy in one table. Final pipeline: **91.3%** of GPS points on the correct road (held-out student-test trips). Full report: [`report/report.pdf`](report/report.pdf).
+
 > **Team split and workflow: see [SPLIT.md](SPLIT.md). What is left: see [TODO.md](TODO.md). Data, preprocessing and features: see [REFERENCE.md](REFERENCE.md).**
 >
 > **Status (Review 1):** data foundation, EDA, maps, labels, candidates, feature table, shared evaluation harness and five classifiers are done (`experiments/results/model_comparison.csv`). `pipeline.predict_trip` works end to end with a rule-based scorer. Still to do: Bayesian optimisation, HMM/Viterbi, model export into the pipeline, the remaining models (RF/ET/DT, KNN/MLP), API/UI integration and the report.

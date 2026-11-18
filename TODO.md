@@ -4,7 +4,7 @@ Status as of 2026-11-18 ~17:00, with PR #9 (`feat/hmm-integration`). Tick items 
 
 **Overall: about 95%.** All the ML work is done and reported. What is left is the **two-laptop run on the real machines** (with screenshots for report section 7), a read-through of the report, and the mock viva.
 
-**Best result (student_test, end to end through the API code path): Top-1 0.910**, continuity 0.931, route breaks 249 (classifier alone 0.880 / 0.867 / 653; rule baseline 0.832).
+**Best result (student_test, end to end through the API code path): Top-1 0.913**, continuity 0.930, route breaks 259 (classifier alone 0.880 / 0.867 / 653; rule baseline 0.832).
 
 ## Done
 
