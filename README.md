@@ -6,7 +6,7 @@ PathSnap matches noisy GPS trajectories to a road network. It generates candidat
 
 > **Team split and workflow: see [SPLIT.md](SPLIT.md). Data, preprocessing and features: see [REFERENCE.md](REFERENCE.md).**
 >
-> **Status:** project foundation (loaders, geometry, network analysis, dataset inventory, API/UI skeletons). Candidate generation, features, models, HMM and evaluation are still to be built; see the TODO docstrings in `src/pathsnap/`.
+> **Status (Review 1):** data foundation, EDA, maps, labels, candidates, feature table, shared evaluation harness and five classifiers are done (`experiments/results/model_comparison.csv`). `pipeline.predict_trip` works end to end with a rule-based scorer. Still to do: Bayesian optimisation, HMM/Viterbi, model export into the pipeline, the remaining models (RF/ET/DT, KNN/MLP), API/UI integration and the report.
 
 ## Repository layout
 
@@ -62,15 +62,22 @@ python scripts/make_maps.py --labels     # label check maps            -> maps/l
 python scripts/candidate_sweep.py        # R/K miss-rate sweep (train) -> experiments/results/candidate_miss_rate.csv
 python scripts/build_candidates.py       # candidate tables            -> data/processed/candidates/, experiments/results/candidate_stats.csv
 python scripts/eval_baseline.py          # rule baseline via predict_trip -> experiments/results/baseline_*.csv
-python scripts/models/adyanth_logreg.py  # LogReg prototypes           -> experiments/results/models/adyanth_logreg*.json
-python scripts/models/adyanth_gnb.py     # Gaussian NB prototypes      -> experiments/results/models/adyanth_gnb*.json
+python scripts/build_dataset.py          # shared feature table        -> data/processed_local/features/ (gitignored), artifacts/feature_list.json
+python scripts/models/adyanth_logreg.py  # each model script calls pathsnap.harness.evaluate_model
+python scripts/models/adyanth_gnb.py     #   -> experiments/results/models/<name>.json
+python scripts/models/advitha_lgbm.py
+python scripts/models/advitha_hgb.py
+python scripts/models/advitha_xgb.py
+python scripts/cv_compare.py             # comparison table + figure  -> experiments/results/model_comparison.csv
 ```
+
+**Adding a model:** write `scripts/models/<you>_<model>.py` that builds an sklearn-compatible estimator (scalers inside a `Pipeline`) and calls `pathsnap.harness.evaluate_model(name, family, estimator, config)`. The harness fixes the data, the folds (`experiments/results/cv_folds.csv`), the metrics and the output format, so every model is comparable. For slow models pass `max_train_obs=` to subsample training observations (recorded in the JSON).
 
 Each stage runs in seconds on 8 cores (all trips in parallel, seed 148). The candidate tables (~30 MB) are committed, so you only need to rerun these if you change `configs/candidates.yaml` or `labels.py`. Decisions and their evidence: [`docs/data_quality_log.md`](docs/data_quality_log.md); handoff notes: [`docs/HANDOFF_ADYANTH.md`](docs/HANDOFF_ADYANTH.md).
 
 Notebooks `notebooks/01_eda.ipynb` and `notebooks/02_labels_candidates.ipynb` walk through the same stages (they call these scripts) and are committed fully executed.
 
-More stages (features, model comparison, Bayesian optimisation, HMM tuning, artifact export) will be added under `scripts/`.
+More stages (Bayesian optimisation, HMM tuning, artifact export) will be added under `scripts/`.
 
 ## Two-laptop deployment
 
