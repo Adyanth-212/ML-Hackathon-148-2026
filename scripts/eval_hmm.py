@@ -100,7 +100,8 @@ def score(d: dict, pred: np.ndarray, ms: float) -> dict:
     ok = d["ok"]
     p = pred[pred >= 0]
     seq = p[np.r_[True, p[1:] != p[:-1]]] if len(p) else p
-    breaks = int(np.sum(d["arcs"].to_node.to_numpy()[p[:-1]] != d["arcs"].from_node.to_numpy()[p[1:]])) if len(p) > 1 else 0
+    ch = np.flatnonzero(p[1:] != p[:-1]) if len(p) > 1 else np.array([], int)  # arc changes only
+    breaks = int(np.sum(d["arcs"].to_node.to_numpy()[p[ch]] != d["arcs"].from_node.to_numpy()[p[ch + 1]]))
     out = {"trip_id": d["trip_id"], "n_obs": int(ok.sum()), "n_correct": int((pred == d["label"])[ok].sum()),
            "continuity": route_continuity(pred, d["arcs"]), "breaks": breaks, "decode_ms": ms}
     if d["route"] is not None:
@@ -231,7 +232,17 @@ def main(argv: list[str]) -> int:
         header = ("# HMM / Viterbi decoder parameters. classifier_weight and beta_m were tuned by\n"
                   "# scripts/eval_hmm.py: grid on the 80 TRAIN trips with out-of-fold classifier scores\n"
                   "# (experiments/results/hmm_grid.csv). Never tuned on evaluator trips.\n")
-        (CONFIG_DIR / "hmm.yaml").write_text(header + yaml.safe_dump(cfg, sort_keys=False))
+        comments = {"prob_floor:": "epsilon so log(p) never becomes -inf",
+                    "distance_sigma_m:": "Gaussian GPS-noise term, if blended with classifier probs",
+                    "classifier_weight:": "1.0 = classifier scores only; 0.0 = distance only (tuned)",
+                    "beta_m:": "scale of |network distance - straight-line distance| (tuned)",
+                    "max_route_factor:": "Dijkstra cutoff = factor * straight-line + slack",
+                    "break_seconds:": "split the HMM when consecutive points are this far apart in time"}
+        lines = []
+        for line in yaml.safe_dump(cfg, sort_keys=False).splitlines():
+            key = line.strip().split(" ")[0]
+            lines.append(f"{line:<26} # {comments[key]}" if key in comments else line)
+        (CONFIG_DIR / "hmm.yaml").write_text(header + "\n".join(lines) + "\n")
         print(f"configs/hmm.yaml updated: classifier_weight={bw:g}, beta_m={bb:g}")
     print(f"total {(time.perf_counter() - t_all) / 60:.1f} min")
     return 0
