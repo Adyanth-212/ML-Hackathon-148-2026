@@ -54,18 +54,23 @@ data/raw/evaluator/      10 trips: final evaluation only
 ## Running the stages
 
 ```bash
-python scripts/inventory.py         # dataset inventory          -> experiments/results/inventory.csv
-python scripts/eda.py               # EDA tables + figures       -> experiments/results/eda_*.csv, experiments/figures/eda_*.png
-python scripts/make_maps.py         # Folium EDA maps            -> maps/eda_*.html
-python scripts/build_labels.py      # per-observation labels     -> data/processed/labels/, experiments/results/label_quality.csv
-python scripts/make_maps.py --labels  # label check maps         -> maps/labels_*.html
-python scripts/candidate_sweep.py   # R/K miss-rate sweep (train) -> experiments/results/candidate_miss_rate.csv
-python scripts/build_candidates.py  # candidate tables           -> data/processed/candidates/, experiments/results/candidate_stats.csv
+python scripts/inventory.py              # dataset inventory           -> experiments/results/inventory.csv
+python scripts/eda.py                    # EDA tables + figures        -> experiments/results/eda_*.csv, experiments/figures/eda_*.png
+python scripts/make_maps.py              # Folium EDA maps             -> maps/eda_*.html
+python scripts/build_labels.py           # per-observation labels      -> data/processed/labels/, experiments/results/label_quality.csv
+python scripts/make_maps.py --labels     # label check maps            -> maps/labels_*.html
+python scripts/candidate_sweep.py        # R/K miss-rate sweep (train) -> experiments/results/candidate_miss_rate.csv
+python scripts/build_candidates.py       # candidate tables            -> data/processed/candidates/, experiments/results/candidate_stats.csv
+python scripts/eval_baseline.py          # rule baseline via predict_trip -> experiments/results/baseline_*.csv
+python scripts/models/adyanth_logreg.py  # LogReg prototypes           -> experiments/results/models/adyanth_logreg*.json
+python scripts/models/adyanth_gnb.py     # Gaussian NB prototypes      -> experiments/results/models/adyanth_gnb*.json
 ```
 
-Each stage runs in seconds on 8 cores (all trips in parallel, seed 148). The candidate tables (~30 MB) are committed, so you only need to rerun these if you change `configs/candidates.yaml` or `labels.py`. Decisions and their evidence: [`docs/data_quality_log.md`](docs/data_quality_log.md).
+Each stage runs in seconds on 8 cores (all trips in parallel, seed 148). The candidate tables (~30 MB) are committed, so you only need to rerun these if you change `configs/candidates.yaml` or `labels.py`. Decisions and their evidence: [`docs/data_quality_log.md`](docs/data_quality_log.md); handoff notes: [`docs/HANDOFF_ADYANTH.md`](docs/HANDOFF_ADYANTH.md).
 
-More stages (candidates, features, model comparison, Bayesian optimisation, HMM tuning, artifact export, map generation) will be added under `scripts/`.
+Notebooks `notebooks/01_eda.ipynb` and `notebooks/02_labels_candidates.ipynb` walk through the same stages (they call these scripts) and are committed fully executed.
+
+More stages (features, model comparison, Bayesian optimisation, HMM tuning, artifact export) will be added under `scripts/`.
 
 ## Two-laptop deployment
 
