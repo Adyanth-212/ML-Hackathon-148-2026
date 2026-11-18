@@ -28,7 +28,6 @@ import pickle
 import sys
 import tempfile
 import time
-from functools import lru_cache
 from pathlib import Path
 
 import joblib
@@ -82,15 +81,13 @@ def prepare_trip(partition: str, files, scorer) -> dict:
             "route": None if route is None else np.asarray(route).ravel()}
 
 
-@lru_cache(maxsize=8)
 def _load(path: str) -> dict:
     with open(path, "rb") as f:
         return pickle.load(f)
 
 
-def decode(path: str, cfg: dict | None) -> tuple[np.ndarray, float]:
+def decode(d: dict, cfg: dict | None) -> tuple[np.ndarray, float]:
     """cfg None = classifier argmax; otherwise the HMM. Returns (pred, decode ms)."""
-    d = _load(path)
     t0 = time.perf_counter()
     if cfg is None:
         pred = argmax_per_obs(d["cands"], d["scores"], d["geom"].n_obs)
@@ -99,8 +96,7 @@ def decode(path: str, cfg: dict | None) -> tuple[np.ndarray, float]:
     return np.asarray(pred), (time.perf_counter() - t0) * 1000
 
 
-def score(path: str, pred: np.ndarray, ms: float) -> dict:
-    d = _load(path)
+def score(d: dict, pred: np.ndarray, ms: float) -> dict:
     ok = d["ok"]
     p = pred[pred >= 0]
     seq = p[np.r_[True, p[1:] != p[:-1]]] if len(p) else p
@@ -118,8 +114,9 @@ def run(paths: list[str], cfgs: dict[str, dict | None], desc: str) -> pd.DataFra
     tasks.sort(key=lambda t: -os.path.getsize(t[1]))
 
     def job(key, p):
-        pred, ms = decode(p, cfgs[key])
-        return {"variant": key, **score(p, pred, ms)}
+        d = _load(p)  # one load per task; workers get only the path
+        pred, ms = decode(d, cfgs[key])
+        return {"variant": key, **score(d, pred, ms)}
 
     rows = []
     gen = Parallel(n_jobs=N_JOBS, return_as="generator_unordered")(delayed(job)(k, p) for k, p in tasks)
@@ -144,15 +141,22 @@ def main(argv: list[str]) -> int:
     base = hmm.load_hmm_config()
     meta = json.loads(repo_path("artifacts/metadata.json").read_text())
     name = meta["model"]
-    tmp = Path(tempfile.mkdtemp(prefix="hmm_eval_"))
+    # --prep-dir DIR reuses the out-of-fold train scores of an earlier run (train_*.pkl)
+    prep = argv[argv.index("--prep-dir") + 1] if "--prep-dir" in argv else None
+    tmp = Path(prep) if prep else Path(tempfile.mkdtemp(prefix="hmm_eval_"))
+    print(f"working dir {tmp}")
 
     # 1. out-of-fold train scores
     tr, _ = load_split("train")
     fold_of = cv_folds(tr["trip_id"])
     trips = discover_trips("train")
-    train_paths = []
+    train_paths = sorted(str(p) for p in tmp.glob("train_*.pkl")) if prep else []
     folds = sorted(set(fold_of.values()))
-    with tqdm(total=len(folds) + len(trips), desc=f"OOF scores ({name})", unit="step", dynamic_ncols=True) as bar:
+    if len(train_paths) == len(trips):
+        print(f"reusing {len(train_paths)} out-of-fold train trips from {tmp}")
+    else:
+      train_paths = []
+      with tqdm(total=len(folds) + len(trips), desc=f"OOF scores ({name})", unit="step", dynamic_ncols=True) as bar:
         for k in folds:
             bar.set_postfix_str(f"fit without fold {k}")
             est, _ = build_from_script(name)
