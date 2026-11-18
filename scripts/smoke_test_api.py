@@ -1,4 +1,11 @@
-"""Smoke-test every trip exposed by the running PathSnap API."""
+"""Smoke-test every trip exposed by the running PathSnap API.
+
+    python scripts/smoke_test_api.py                 # evaluator trips (the demo path), default
+    python scripts/smoke_test_api.py student-test    # practice set
+
+PATHSNAP_API_URL points at Laptop 1 (default http://127.0.0.1:8000). Only pass/fail and timing
+are printed, not scores, so nobody looks at evaluator results before the demo.
+"""
 from __future__ import annotations
 
 import os
@@ -10,13 +17,14 @@ import requests
 
 API_URL = os.environ.get("PATHSNAP_API_URL", "http://127.0.0.1:8000").rstrip("/")
 TIMEOUT = float(os.environ.get("PATHSNAP_SMOKE_TIMEOUT", "300"))
+PREFIX = sys.argv[1] if len(sys.argv) > 1 else "evaluator"
 
 
 def main() -> int:
     try:
         health = requests.get(f"{API_URL}/health", timeout=10)
         health.raise_for_status()
-        trips_response = requests.get(f"{API_URL}/trips", timeout=30)
+        trips_response = requests.get(f"{API_URL}/{PREFIX}/trips", timeout=30)
         trips_response.raise_for_status()
         trips = trips_response.json()
     except requests.RequestException as exc:
@@ -24,7 +32,7 @@ def main() -> int:
         return 1
 
     if not trips:
-        print("No evaluator trips were returned by /trips", file=sys.stderr)
+        print(f"No trips were returned by /{PREFIX}/trips", file=sys.stderr)
         return 1
 
     print(f"PathSnap API v{health.json().get('version')} · {len(trips)} trips")
@@ -34,7 +42,7 @@ def main() -> int:
         started = time.perf_counter()
         try:
             response = requests.post(
-                f"{API_URL}/predict", json={"trip_id": trip_id}, timeout=TIMEOUT
+                f"{API_URL}/{PREFIX}/predict", json={"trip_id": trip_id}, timeout=TIMEOUT
             )
             elapsed = time.perf_counter() - started
             response.raise_for_status()

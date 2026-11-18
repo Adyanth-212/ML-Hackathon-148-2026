@@ -236,6 +236,11 @@ def evaluator_predict(req: PredictRequest, request: Request):
         log.exception("Evaluation failed for trip %s", req.trip_id)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
+    log.info(
+        "Evaluation: trip=%s top1=%s miss_rate=%s route_f1=%s continuity=%s points_scored=%s",
+        req.trip_id, metrics.get("top1_accuracy"), metrics.get("candidate_miss_rate"),
+        metrics.get("route_f1"), metrics.get("route_continuity"), metrics.get("n_points_scored"),
+    )
     # Return derived metrics only. Never return the reference route.
     return {**result, "metrics": metrics}
 
