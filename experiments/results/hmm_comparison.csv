@@ -1,0 +1,4 @@
+method,student_test_top1
+classifier argmax,0.5477447342288193
+HMM distance-only,0.7618251189045105
+"classifier+HMM (w=1.0, beta=10, tuned on train)",0.8875241728949982
