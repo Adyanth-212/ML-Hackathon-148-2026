@@ -8,6 +8,7 @@
   },
   "seed": 148,
   "status": "prototype (pre-harness): simple features from the candidate table; rerun via harness when it lands",
+  "feature_set": "dist",
   "features": [
     "dist_m",
     "dist_rank",
@@ -216,8 +217,8 @@
   },
   "route_continuity": null,
   "route_continuity_reason": "classifier-only argmax, no decoder; computed in the HMM stage (metrics.py not on main yet)",
-  "fit_seconds": 0.19671549200006666,
-  "inference_ms_per_trip": 3.493563499978336,
-  "inference_ms_per_point": 0.001825936079014444,
-  "total_seconds": 8.002498321000076
+  "fit_seconds": 0.19433292200028518,
+  "inference_ms_per_trip": 3.291960900014601,
+  "inference_ms_per_point": 0.0017205670307921398,
+  "total_seconds": 9.00885433700023
 }

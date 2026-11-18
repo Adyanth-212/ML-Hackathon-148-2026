@@ -5,8 +5,9 @@ scripts switch to ``harness.evaluate_model`` and these results are superseded.
 
 Protocol (mirrors SPLIT.md section 4 so results stay comparable):
 * data: committed candidate tables (R=60 m, K=30) + simple per-candidate features computed
-  here from the candidate table only (no labels, no route):
-  ``dist_m, dist_rank, dist_minus_min, proj_frac, proj_outside, n_candidates``
+  here from the candidate table and raw GPS/network only (no labels, no route):
+  ``dist``: dist_m, dist_rank, dist_minus_min, proj_frac, proj_outside, n_candidates
+  ``dist+dir``: the above + heading_cos, heading_valid, heading_cos_gap (GPS heading vs arc direction)
 * observations whose derived label is unreliable (``is_outlier``, > 50 m from the route) are
   dropped from training and evaluation (count recorded); misses stay in (all-zero groups)
 * CV: GroupKFold(5, shuffle=True, random_state=148) by trip on the 80 train trips
@@ -30,7 +31,37 @@ from sklearn.model_selection import GroupKFold
 from pathsnap.config import load_config, repo_path
 
 SEED = 148
-FEATURES = ["dist_m", "dist_rank", "dist_minus_min", "proj_frac", "proj_outside", "n_candidates"]
+DIST_FEATURES = ["dist_m", "dist_rank", "dist_minus_min", "proj_frac", "proj_outside", "n_candidates"]
+DIR_FEATURES = ["heading_cos", "heading_valid", "heading_cos_gap"]
+FEATURE_SETS = {"dist": DIST_FEATURES, "dist+dir": DIST_FEATURES + DIR_FEATURES}
+
+
+def add_direction_features(c: pd.DataFrame, geom) -> pd.DataFrame:
+    """Direction features for one trip's candidates (GPS + network only):
+    heading_cos      cos(angle between GPS heading and arc direction); 0 when heading unknown
+    heading_valid    1 if the point moved >= 5 m between its neighbours (heading trusted)
+    heading_cos_gap  best heading_cos among the observation's candidates minus this one's"""
+    from pathsnap.labels import obs_heading
+
+    ux, uy, valid = obs_heading(geom, 5.0)
+    o, a = c["obs_idx"].to_numpy(), c["arc_id"].to_numpy()
+    vx, vy = geom.bx[a] - geom.ax[a], geom.by[a] - geom.ay[a]
+    ln = np.hypot(vx, vy)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        cos = np.where(valid[o] & (ln > 0), (ux[o] * vx + uy[o] * vy) / ln, 0.0)
+    c = c.copy()
+    c["heading_cos"] = cos.astype(np.float32)
+    c["heading_valid"] = valid[o].astype(np.float32)
+    c["heading_cos_gap"] = (c.groupby(["trip_id", "obs_idx"], sort=False)["heading_cos"].transform("max")
+                            - c["heading_cos"]).astype(np.float32)
+    return c
+
+
+def _geom(partition: str, trip_id: str):
+    from pathsnap.geo import TripGeometry
+    from pathsnap.io import discover_trips, load_trip
+
+    return TripGeometry.from_trip(load_trip(discover_trips(partition)[trip_id]))
 
 
 def add_simple_features(c: pd.DataFrame) -> pd.DataFrame:
@@ -48,7 +79,7 @@ def load_partition(partition: str) -> tuple[pd.DataFrame, dict]:
     files = sorted(repo_path(f"data/processed/candidates/{partition}").glob("*.parquet"))
     parts, n_obs, n_drop, trips = [], 0, 0, {}
     for f in files:
-        c = pd.read_parquet(f)
+        c = add_direction_features(pd.read_parquet(f), _geom(partition, f.stem))
         lab = pd.read_parquet(repo_path(f"data/processed/labels/{partition}/{f.stem}.parquet"))
         ok = ~lab.is_outlier.to_numpy()
         n_obs += int(ok.sum())
@@ -105,7 +136,8 @@ def candidate_metrics(y: np.ndarray, proba: np.ndarray) -> dict:
     }
 
 
-def evaluate(name: str, family: str, estimator, config: dict) -> dict:
+def evaluate(name: str, family: str, estimator, config: dict, feature_set: str = "dist") -> dict:
+    FEATURES = FEATURE_SETS[feature_set]
     t_all = time.perf_counter()
     tr, tr_info = load_partition("train")
     te, te_info = load_partition("student_test")
@@ -128,13 +160,15 @@ def evaluate(name: str, family: str, estimator, config: dict) -> dict:
     final = clone(estimator).fit(X, y)
     fit_s = time.perf_counter() - t0
 
-    # held-out: per-trip inference timing including feature computation
+    # held-out: per-trip inference timing, including projection and feature computation
     proba, per_trip_ms = np.empty(len(te)), []
     for tid, idx in te.groupby("trip_id", sort=False).indices.items():
         raw = te.iloc[idx][["trip_id", "obs_idx", "arc_id", "dist_m", "proj_frac"]]
         t0 = time.perf_counter()
-        f = add_simple_features(raw)[FEATURES].to_numpy(np.float64)
-        proba[idx] = final.predict_proba(f)[:, 1]
+        f = add_simple_features(raw)
+        if feature_set != "dist":
+            f = add_direction_features(f, _geom("student_test", tid))
+        proba[idx] = final.predict_proba(f[FEATURES].to_numpy(np.float64))[:, 1]
         per_trip_ms.append((time.perf_counter() - t0) * 1000)
     yt = te["label"].to_numpy()
     st = candidate_metrics(yt, proba)
@@ -147,7 +181,7 @@ def evaluate(name: str, family: str, estimator, config: dict) -> dict:
     out = {
         "name": name, "family": family, "config": config, "seed": SEED,
         "status": "prototype (pre-harness): simple features from the candidate table; rerun via harness when it lands",
-        "features": FEATURES,
+        "feature_set": feature_set, "features": FEATURES,
         "data": {"candidates": load_config("candidates"), "train": {k: v for k, v in tr_info.items() if k != "obs_per_trip"},
                  "student_test": {k: v for k, v in te_info.items() if k != "obs_per_trip"},
                  "train_rows": int(len(tr)), "student_test_rows": int(len(te)),
