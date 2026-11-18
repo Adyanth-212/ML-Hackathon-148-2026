@@ -69,8 +69,9 @@ def main() -> int:
     for ax, (col, err, title) in zip(axs, panels):
         ax.barh(m.model, m[col], xerr=m[err] if err else None, color=colors, height=0.6,
                 error_kw={"ecolor": INK, "elinewidth": 1, "capsize": 3})
-        for y, v in enumerate(m[col]):
-            ax.text(v, y, f" {v:.3f}", va="center", fontsize=8, color=INK)
+        ends = m[col] + (m[err] if err else 0)
+        for y, (v, e) in enumerate(zip(m[col], ends)):
+            ax.text(e, y, f"  {v:.3f}", va="center", fontsize=8, color=INK)
         ax.set_title(title, fontsize=10, color=INK, loc="left")
         ax.grid(axis="x", color="#d0d7de", lw=0.6)
         ax.set_axisbelow(True)
@@ -78,7 +79,8 @@ def main() -> int:
             ax.spines[s].set_visible(False)
         ax.tick_params(colors=MUTED, labelsize=8)
     axs[0].tick_params(axis="y", colors=INK, labelsize=9)
-    axs[1].set_xlim(0, 1)
+    for ax in axs[:2]:
+        ax.set_xlim(0, 1.08)
     fig.suptitle("Model comparison (light bars = feature-group ablations)", x=0.01, ha="left", fontsize=11, color=INK)
     fig.tight_layout()
     fig.savefig(repo_path("experiments/figures/model_comparison.png"), dpi=140)
