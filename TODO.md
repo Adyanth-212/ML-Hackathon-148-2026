@@ -22,11 +22,11 @@ Status as of 2026-11-18, after the first presentation (`main` at `cda1a69`). Tic
 |---|---|---|---|---|
 | 1 | **HMM / Viterbi decoder** in `src/pathsnap/hmm.py`, exposing `make_decoder(config)` (contract in `docs/HANDOFF_ADYANTH.md`), tuned on train/student_test only | Sudhe | ❌ not started (`metrics.py` only, unmerged) | Required (report section 5). Biggest open item. Should fix junction errors (43% of current errors) and raise continuity above 0.87 |
 | 2 | **HMM evaluation:** classifier-only vs HMM table, continuity, failure cases, where it did not help | Sudhe | ❌ | Required table |
-| 3 | **Bayesian optimisation** of LightGBM or XGBoost: Optuna study saving every trial, untuned vs tuned table, compute cost | Advitha | ❌ | Required (report section 4) |
-| 4 | Re-export the tuned model: `python scripts/export_artifacts.py <tuned_model_name>` | Advitha | ❌ (one command) | The API serves it automatically |
+| 3 | **Bayesian optimisation** of LightGBM or XGBoost: Optuna study saving every trial, untuned vs tuned table, compute cost | Advitha | ✅ 40-trial Optuna study, `scripts/optimize.py`; CV Top-1 0.8639 → 0.8651 (`report/notes_advitha.md`) | Required (report section 4) |
+| 4 | Re-export the tuned model: `python scripts/export_artifacts.py <tuned_model_name>` | Advitha | ✅ `advitha_lgbm_tuned` exported; end-to-end Top-1 0.880, ~209 ms per trip | The API serves it automatically |
 | 5 | **Remaining models** through the harness: RF / ET / DT (Sudhe), KNN / MLP (Tilak); MLP with real epoch train/val loss curves | Sudhe, Tilak | ❌ | Assigned in SPLIT.md; MLP is the only model with genuine loss curves |
-| 6 | Confusion-matrix figures + CV macro F1 bar chart with fold error bars | Advitha (`scripts/cv_compare.py`) | ⚠️ the numbers are in the model JSONs; the figures are missing | Report section 3.3 |
-| 7 | Written justification for the final model | Advitha | ⚠️ evidence ready | Report section 3.1 |
+| 6 | Confusion-matrix figures + CV macro F1 bar chart with fold error bars | Advitha (`scripts/cv_compare.py`) | ✅ `cv_macro_f1.png`, `confusion_matrices.png` | Report section 3.3 |
+| 7 | Written justification for the final model | Advitha | ✅ facts + talking points in `report/notes_advitha.md` (prose still to write in own words) | Report section 3.1 |
 | 8 | **Two-laptop test on all 10 evaluator trips** + `scripts/smoke_test_api.py`; capture API terminal logs and UI screenshots | Tilak | ⚠️ works on the toy fixture only | Mandatory demo; test on the real network, phone hotspot as backup |
 | 9 | Merge Sudhe's `metrics.py` and use it in `api/evaluation.py` (Top-1 and miss rate are currently `None`) | Sudhe + Tilak | ⚠️ | Metrics shown in the UI |
 | 10 | **PDF report** in the required structure (sections 2.2-8) | everyone, own sections | ❌ | The deliverable. Must be in our own words (AI-text checks); facts in `report/notes_adyanth.md` |
@@ -38,7 +38,7 @@ Status as of 2026-11-18, after the first presentation (`main` at `cda1a69`). Tic
 | Person | Share | Items |
 |---|---|---|
 | Sudhe | ~40% (critical path) | 1, 2, 5 (RF/ET/DT), 9 |
-| Advitha | ~20% | 3, 4, 6, 7 |
+| Advitha | done (by Adyanth) | 3, 4, 6, 7; own report sections 3.1-3.3, 4 from `report/notes_advitha.md` |
 | Tilak | ~20% | 5 (KNN/MLP), 8, 9 |
 | Everyone | ~20% | 10, 11, 12 |
 | Adyanth | own part done | own report sections; can help with 1, 6 and checking numbers in report drafts |

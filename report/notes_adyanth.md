@@ -61,7 +61,7 @@ Talking points (put them in your own words):
 - Layers: raw GPS, network within 200 m, reference route (green), predicted route (red), wrong points orange; LayerControl and legend. Code: `scripts/make_maps.py`, `src/pathsnap/viz.py`.
 
 ## Pipeline facts (for sections 5 and 7)
-`pipeline_summary.csv`, `pipeline_error_types.csv`: exported model LightGBM (best CV Top-1). Student_test Top-1 0.879, argmax continuity 0.867, 646 breaks (the rule: 0.832 / 0.728 / 1,708), ~77 ms per trip. Errors: 43% adjacent arc, 42% reverse twin, 15% other. For 81% of the twin errors with a trusted heading, the prediction matches the driving direction and the label does not: direction noise in the reference route (mostly trip 77).
+`pipeline_summary.csv`, `pipeline_error_types.csv`: exported model: Bayesian-tuned LightGBM (best CV Top-1; untuned LightGBM gave 0.879 / 646 breaks / ~77 ms). Student_test Top-1 0.880, argmax continuity 0.867, 653 breaks (the rule: 0.832 / 0.728 / 1,708), ~209 ms per trip. Errors (2,304 wrong points): 42% adjacent arc, 43% reverse twin, 15% other (untuned: 2,320; 43% / 42% / 15%). For 80% of the twin errors with a trusted heading, the prediction matches the driving direction and the label does not: direction noise in the reference route (mostly trip 77).
 
 ## Viva checklist (Adyanth must be able to explain)
 1. Why per-trip UTM and not degrees; why haversine is used only for EDA speeds.
