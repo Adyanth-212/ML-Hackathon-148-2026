@@ -17,6 +17,12 @@ the per-observation argmax.
 
 Observations without any candidate inherit the arc of the nearest observation in time
 that has one, and are listed in ``no_candidate_obs``.
+
+``load_artifacts()`` builds the artifacts dict from ``artifacts/``: the exported classifier
+(``scripts/export_artifacts.py``) wrapped as a scorer over ``features.build_features``, and,
+once the HMM exists, a decoder from ``pathsnap.hmm.make_decoder(config)`` (contract:
+returns ``decoder(geom, cands, scores) -> np.ndarray`` of one arc id per observation, -1
+allowed where it cannot decide). The API calls ``load_artifacts()`` once at startup.
 """
 from __future__ import annotations
 
@@ -97,6 +103,47 @@ def route_lonlat(trip, arc_seq: np.ndarray) -> list[list[float]]:
     return np.c_[lon, lat].round(7).tolist()
 
 
+def load_artifacts(directory: str = "artifacts", use_decoder: bool = True) -> dict:
+    """Load the exported classifier (and the HMM decoder when available) for predict_trip.
+
+    Returns ``{"scorer", "decoder" (optional), "metadata"}``. Without ``model.joblib`` it
+    returns ``{}``, i.e. the rule-based baseline.
+    """
+    import json
+
+    import joblib
+
+    from .config import load_config, repo_path
+    from .features import FEATURE_COLUMNS, build_features
+
+    root = repo_path(directory)
+    model_path = root / "model.joblib"
+    if not model_path.exists():
+        return {}
+    model = joblib.load(model_path)
+    meta = json.loads((root / "metadata.json").read_text()) if (root / "metadata.json").exists() else {}
+    feats = meta.get("features", FEATURE_COLUMNS)
+    if feats != FEATURE_COLUMNS:
+        raise ValueError("artifacts/model.joblib was trained on a different feature list; re-export it")
+
+    def scorer(geom: TripGeometry, cands: pd.DataFrame) -> np.ndarray:
+        if len(cands) == 0:
+            return np.zeros(0)
+        X = build_features(geom, cands)[FEATURE_COLUMNS].to_numpy(np.float32)
+        return model.predict_proba(X)[:, 1]
+
+    out = {"scorer": scorer, "metadata": meta}
+    if use_decoder:
+        try:
+            from . import hmm
+            make = getattr(hmm, "make_decoder", None)
+            if make is not None:
+                out["decoder"] = make(load_config("hmm"))
+        except NotImplementedError:
+            pass
+    return out
+
+
 def predict_trip(trip, artifacts=None) -> dict:
     """Per-observation predicted arc ids plus route geometry and timings. No reference route."""
     artifacts = artifacts or {}
@@ -131,8 +178,8 @@ def predict_trip(trip, artifacts=None) -> dict:
         "route_lonlat": route,
         "timings_ms": {k: round(v, 2) for k, v in timings.items()},
         "no_candidate_obs": no_cand.tolist(),
-        "method": {"scorer": "artifact" if scorer is not None else
-                   f"baseline: dist + {BASELINE_HEADING_WEIGHT_M:g} m x heading mismatch",
+        "method": {"scorer": (artifacts.get("metadata", {}).get("model", "artifact") if scorer is not None else
+                              f"baseline: dist + {BASELINE_HEADING_WEIGHT_M:g} m x heading mismatch"),
                    "decoder": "artifact" if decoder is not None else "per-observation argmax",
                    "n_candidates": int(len(cands))},
     }

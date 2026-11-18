@@ -1,0 +1,3 @@
+variant,scorer,trips,n_obs,top1,n_correct,continuity_mean,breaks_total,total_ms_mean,total_ms_max,scoring_ms_mean
+baseline_rule,baseline: dist + 20 m x heading mismatch,10,19133,0.8324361051586264,15927,0.7284083283850868,1708,17.330000000000002,33.64,0.775
+model,advitha_lgbm,10,19133,0.8787435321172843,16813,0.86693549551535,646,72.064,151.89,54.624
