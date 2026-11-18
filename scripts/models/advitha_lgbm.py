@@ -15,6 +15,9 @@ CONFIG = {"objective": "binary", "n_estimators": 400, "learning_rate": 0.05, "nu
           "min_child_samples": 50, "subsample": 0.8, "subsample_freq": 1, "colsample_bytree": 0.8,
           "reg_lambda": 1.0}
 
+def build():
+    return LGBMClassifier(**CONFIG, random_state=SEED, n_jobs=-1, verbose=-1)
+
+
 if __name__ == "__main__":
-    est = LGBMClassifier(**CONFIG, random_state=SEED, n_jobs=-1, verbose=-1)
-    evaluate_model("advitha_lgbm", "gradient boosting (LightGBM)", est, CONFIG)
+    evaluate_model("advitha_lgbm", "gradient boosting (LightGBM)", build(), CONFIG)

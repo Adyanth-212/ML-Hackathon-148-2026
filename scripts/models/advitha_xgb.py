@@ -13,6 +13,9 @@ CONFIG = {"objective": "binary:logistic", "n_estimators": 400, "learning_rate": 
           "min_child_weight": 5, "subsample": 0.8, "colsample_bytree": 0.8, "reg_lambda": 1.0,
           "tree_method": "hist", "eval_metric": "logloss"}
 
+def build():
+    return XGBClassifier(**CONFIG, random_state=SEED, n_jobs=-1)
+
+
 if __name__ == "__main__":
-    est = XGBClassifier(**CONFIG, random_state=SEED, n_jobs=-1)
-    evaluate_model("advitha_xgb", "gradient boosting (XGBoost)", est, CONFIG)
+    evaluate_model("advitha_xgb", "gradient boosting (XGBoost)", build(), CONFIG)
