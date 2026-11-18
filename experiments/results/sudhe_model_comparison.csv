@@ -1,0 +1,4 @@
+Model,Accuracy,Macro F1,Execution Time (s)
+Random Forest,0.9582,0.894184,2.25
+Extra Trees,0.9418,0.860096,2.2
+Decision Tree,0.9526,0.88418,2.21
