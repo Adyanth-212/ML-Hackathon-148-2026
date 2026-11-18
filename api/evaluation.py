@@ -8,8 +8,12 @@ from __future__ import annotations
 
 import numpy as np
 
+from pathsnap.candidates import generate_candidates
 from pathsnap.config import load_config, repo_path
-from pathsnap.io import discover_trips, read_arcs, read_route
+from pathsnap.geo import TripGeometry
+from pathsnap.io import discover_trips, load_trip, read_arcs, read_route
+from pathsnap.labels import align_route_to_observations
+from pathsnap.metrics import candidate_miss_rate
 
 
 def _edit_similarity(reference: list[int], predicted: list[int]) -> float:
@@ -35,6 +39,29 @@ def _route_continuity(predicted: list[int], arcs) -> float | None:
         return None
     connected = sum(pairs[a, 1] == pairs[b, 0] for a, b in zip(valid, valid[1:]))
     return float(connected / (len(valid) - 1))
+
+
+def _pointwise(files, prediction: dict) -> dict:
+    """Observation-level Top-1 and candidate miss rate against per-point labels.
+
+    The labels come from the same monotonic DP alignment of the reference route used for
+    train/student_test (pathsnap.labels), computed here on the server after prediction.
+    Points the alignment flags as unreliable (> 50 m from their aligned arc) are excluded,
+    exactly as in training and evaluation. Candidates are regenerated from the track and
+    network alone (the same call the pipeline makes).
+    """
+    trip = load_trip(files, with_route=True)
+    geom = TripGeometry.from_trip(trip)
+    aligned = align_route_to_observations(geom, trip.route)
+    labels = aligned["arc_id"].to_numpy()
+    ok = ~aligned["is_outlier"].to_numpy()
+    pred = np.asarray(prediction.get("pred_arcs", []), dtype=int)
+    if len(pred) != geom.n_obs or not ok.any():
+        return {"top1_accuracy": None, "candidate_miss_rate": None, "n_points_scored": int(ok.sum())}
+    cands, _ = generate_candidates(geom, trip.trip_id)
+    return {"top1_accuracy": round(float(np.mean(pred[ok] == labels[ok])), 6),
+            "candidate_miss_rate": round(candidate_miss_rate(cands, np.where(ok, labels, -1)), 6),
+            "n_points_scored": int(ok.sum())}
 
 
 def score(trip_id: str, prediction: dict) -> dict:
@@ -63,15 +90,16 @@ def score(trip_id: str, prediction: dict) -> dict:
     recall = overlap / len(reference) if reference else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
     arcs = read_arcs(files.arcs)
+    pointwise = _pointwise(files, prediction)
 
     return {
+        **pointwise,
         "route_precision": round(float(precision), 6),
         "route_recall": round(float(recall), 6),
         "route_f1": round(float(f1), 6),
         "route_exact_match": bool(reference == predicted),
         "route_edit_similarity": round(_edit_similarity(reference, predicted), 6),
         "route_continuity": _route_continuity(predicted, arcs),
-        # Candidate-level metrics are not applicable to the nearest-arc stub.
-        "candidate_miss_rate": None,
-        "classifier_top1_accuracy": None,
+        # kept for older UI builds: the same value as top1_accuracy (pipeline output, HMM included)
+        "classifier_top1_accuracy": pointwise["top1_accuracy"],
     }

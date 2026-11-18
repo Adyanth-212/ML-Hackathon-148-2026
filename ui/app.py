@@ -1,4 +1,4 @@
-"""PathSnap student-test UI.
+"""PathSnap evaluator UI (evaluator trips by default; student-test as a practice mode).
 
 The UI is a thin API client: it does not read dataset files, reference routes,
 or model artifacts. Configure PATHSNAP_API_URL for the API server.
@@ -24,8 +24,8 @@ st.set_page_config(
 
 st.title("PathSnap: GPS map-matching")
 st.caption(
-    "Select a student-test trip, run the trained model, "
-    "and inspect the reconstructed route."
+    "Select a trip, run the trained model + HMM on the API server, "
+    "and inspect the reconstructed route and its server-side scores."
 )
 
 # ---------------------------------------------------------
@@ -52,6 +52,17 @@ with st.sidebar:
         )
         st.stop()
 
+    st.subheader("Trip set")
+    MODE = st.radio(
+        "Trip set",
+        ["Evaluator trips (scored on the server)", "Student-test trips (practice, no scoring)"],
+        label_visibility="collapsed",
+    )
+
+EVALUATOR = MODE.startswith("Evaluator")
+PREFIX = "evaluator" if EVALUATOR else "student-test"
+SET_NAME = "evaluator" if EVALUATOR else "student-test"
+
 
 # ---------------------------------------------------------
 # Student-test trip listing
@@ -59,18 +70,20 @@ with st.sidebar:
 
 try:
     trips_response = requests.get(
-        f"{API_URL}/student-test/trips",
+        f"{API_URL}/{PREFIX}/trips",
         timeout=15,
     )
     trips_response.raise_for_status()
     trips = trips_response.json()
 
 except (requests.RequestException, ValueError) as exc:
-    st.error(f"Could not load student-test trips: {exc}")
+    st.error(f"Could not load {SET_NAME} trips: {exc}")
     st.stop()
 
 if not trips:
-    st.warning("The API currently reports no student-test trips.")
+    st.warning(f"The API reports no {SET_NAME} trips. "
+               + ("Put the evaluator files in data/raw/evaluator/ on Laptop 1 and restart the API."
+                  if EVALUATOR else ""))
     st.stop()
 
 trip_labels = {
@@ -83,7 +96,7 @@ trip_labels = {
 }
 
 selected_label = st.selectbox(
-    "Student-test trip",
+    f"{SET_NAME.capitalize()} trip ({len(trips)} available)",
     list(trip_labels),
 )
 selected_trip = trip_labels[selected_label]
@@ -102,7 +115,7 @@ if st.button(
 
     try:
         response = requests.post(
-            f"{API_URL}/student-test/predict",
+            f"{API_URL}/{PREFIX}/predict",
             json={"trip_id": selected_trip},
             timeout=REQUEST_TIMEOUT,
         )
@@ -119,6 +132,7 @@ if st.button(
             "payload": payload,
             "elapsed_s": elapsed,
             "trip_id": selected_trip,
+            "mode": PREFIX,
         }
 
     except requests.RequestException as exc:
@@ -131,7 +145,7 @@ if st.button(
 
 result = st.session_state.get("prediction_result")
 
-if result and result.get("trip_id") == selected_trip:
+if result and result.get("trip_id") == selected_trip and result.get("mode") == PREFIX:
     st.divider()
     st.subheader(f"Prediction · {selected_trip}")
 
@@ -150,6 +164,8 @@ if result and result.get("trip_id") == selected_trip:
         metric_values = body.get("metrics") or {}
 
         metric_order = [
+            ("top1_accuracy", "Point Top-1"),
+            ("candidate_miss_rate", "Candidate miss rate"),
             ("route_f1", "Route F1"),
             ("route_precision", "Route precision"),
             ("route_recall", "Route recall"),

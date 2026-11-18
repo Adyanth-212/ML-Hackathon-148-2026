@@ -1,0 +1,69 @@
+{
+  "name": "sudhe_random_forest",
+  "family": "tree ensemble",
+  "config": {
+    "n_estimators": 120,
+    "max_depth": 18,
+    "min_samples_leaf": 2,
+    "class_weight": "balanced",
+    "random_state": 148,
+    "n_jobs": -1
+  },
+  "seed": 148,
+  "status": "development evaluation; 5-fold GroupKFold by trip_id and held-out student_test",
+  "features": [
+    "dist_m",
+    "proj_frac",
+    "dist_rank",
+    "dist_minus_min",
+    "proj_outside",
+    "n_candidates"
+  ],
+  "train_rows": 2051187,
+  "student_test_rows": 244096,
+  "cv": {
+    "folds": [
+      {
+        "fold": 1,
+        "macro_f1": 0.7854136065573318,
+        "top1": 0.5793960841989153,
+        "fit_seconds": 87.33181490000061
+      },
+      {
+        "fold": 2,
+        "macro_f1": 0.7833315743350324,
+        "top1": 0.5458011882592888,
+        "fit_seconds": 84.10086220000085
+      },
+      {
+        "fold": 3,
+        "macro_f1": 0.7818179196985378,
+        "top1": 0.5455027077937368,
+        "fit_seconds": 90.50043860000005
+      },
+      {
+        "fold": 4,
+        "macro_f1": 0.7906784052121308,
+        "top1": 0.5529701160123658,
+        "fit_seconds": 157.8702028000007
+      },
+      {
+        "fold": 5,
+        "macro_f1": 0.7844486823443233,
+        "top1": 0.5191807690553301,
+        "fit_seconds": 113.74625920000108
+      }
+    ],
+    "macro_f1_mean": 0.7851380376294712,
+    "macro_f1_std": 0.0030177247920779595
+  },
+  "student_test": {
+    "top1_accuracy": 0.5477969999477342,
+    "precision": 0.4687682273715467,
+    "recall": 0.9241101761354727,
+    "macro_f1": 0.786096436618166,
+    "log_loss": 0.21103558688278942
+  },
+  "fit_seconds": 109.9583390000007,
+  "total_seconds": 652.2021203000004
+}

@@ -3,8 +3,9 @@
     python scripts/export_artifacts.py   # first
     python scripts/eval_pipeline.py
 
-Runs predict_trip exactly as the API does (trip loaded without its route), once with the
-exported classifier (load_artifacts) and once with the rule-based baseline, then scores the
+Runs predict_trip exactly as the API does (trip loaded without its route), with the exported
+classifier + HMM decoder (``model_hmm``, the API path), the classifier alone (``model``) and the
+rule-based baseline, then scores the
 returned arcs against the derived labels (reliable observations only). Writes
 experiments/results/pipeline_student_test.csv (per trip), pipeline_summary.csv and
 pipeline_error_types.csv (each wrong observation classified as: reverse twin of the label arc,
@@ -16,6 +17,7 @@ import sys
 
 import numpy as np
 import pandas as pd
+from tqdm.auto import tqdm
 
 from pathsnap.config import repo_path
 from pathsnap.geo import TripGeometry
@@ -60,12 +62,14 @@ def error_types(arcs: pd.DataFrame, pred: np.ndarray, label: np.ndarray, use: np
 
 
 def main() -> int:
-    variants = {"model": load_artifacts(use_decoder=False), "baseline_rule": {}}
+    variants = {"model_hmm": load_artifacts(), "model": load_artifacts(use_decoder=False), "baseline_rule": {}}
+    if "decoder" not in variants["model_hmm"]:
+        del variants["model_hmm"]  # no decoder available: classifier-only, as before
     model_name = variants["model"].get("metadata", {}).get("model")
     if not model_name:
         raise SystemExit("artifacts/model.joblib missing: run scripts/export_artifacts.py")
     rows, errs = [], []
-    for tid, files in discover_trips("student_test").items():
+    for tid, files in tqdm(discover_trips("student_test").items(), desc="student_test trips", unit="trip"):
         trip = load_trip(files)  # with_route=False: what the API does
         lab = pd.read_parquet(repo_path(f"data/processed/labels/student_test/{tid}.parquet"))
         ok = ~lab.is_outlier.to_numpy()
@@ -94,7 +98,7 @@ def main() -> int:
     e.to_csv(repo_path("experiments/results/pipeline_error_types.csv"), index=False)
     et = e.groupby("variant")[["wrong", "reverse_twin", "duplicate_arc", "adjacent_arc", "other"]].sum()
     print(et.assign(**{f"{c}_share": et[c] / et.wrong for c in ["reverse_twin", "adjacent_arc", "other"]}).round(3).to_string())
-    print(df[df.variant == "model"][["trip_id", "n_obs", "top1", "route_continuity", "total_ms"]].round(3).to_string(index=False))
+    print(df[df.variant == ("model_hmm" if "model_hmm" in variants else "model")][["trip_id", "n_obs", "top1", "route_continuity", "total_ms"]].round(3).to_string(index=False))
     print(summ.round(4).to_string())
     return 0
 
