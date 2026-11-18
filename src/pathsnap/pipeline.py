@@ -116,7 +116,19 @@ def predict_trip(trip, artifacts=None) -> dict:
 
     t0 = time.perf_counter()
     decoder = artifacts.get("decoder")
-    pred = decoder(geom, cands, scores) if decoder is not None else argmax_per_obs(cands, scores, geom.n_obs)
+    decoder_breaks = np.zeros(geom.n_obs, dtype=bool)
+    if decoder is not None:
+        decoded = decoder(geom, cands, scores)
+        if isinstance(decoded, tuple) and len(decoded) == 2:
+            pred, decoder_breaks = decoded
+        else:
+            pred = decoded
+        pred = np.asarray(pred, dtype=np.int64)
+        decoder_breaks = np.asarray(decoder_breaks, dtype=bool)
+        if pred.shape != (geom.n_obs,) or decoder_breaks.shape != (geom.n_obs,):
+            raise ValueError("Decoder must return one arc and one break flag per observation.")
+    else:
+        pred = argmax_per_obs(cands, scores, geom.n_obs)
     pred = fill_missing(np.asarray(pred, dtype=np.int64), geom.t)
     timings["decode_ms"] = (time.perf_counter() - t0) * 1000
 
@@ -131,6 +143,7 @@ def predict_trip(trip, artifacts=None) -> dict:
         "route_lonlat": route,
         "timings_ms": {k: round(v, 2) for k, v in timings.items()},
         "no_candidate_obs": no_cand.tolist(),
+        "decoder_breaks": decoder_breaks.tolist(),
         "method": {"scorer": "artifact" if scorer is not None else
                    f"baseline: dist + {BASELINE_HEADING_WEIGHT_M:g} m x heading mismatch",
                    "decoder": "artifact" if decoder is not None else "per-observation argmax",
