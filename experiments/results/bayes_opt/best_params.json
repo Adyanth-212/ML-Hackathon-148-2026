@@ -1,0 +1,19 @@
+{
+  "study": "lgbm_top1_v1",
+  "best_trial": 32,
+  "cv_top1_mean": 0.865092638914793,
+  "cv_macro_f1_mean": 0.9253037310451177,
+  "cv_log_loss_mean": 0.06382184034635799,
+  "params": {
+    "objective": "binary",
+    "subsample_freq": 1,
+    "n_estimators": 800,
+    "learning_rate": 0.014129111194342884,
+    "num_leaves": 254,
+    "min_child_samples": 20,
+    "subsample": 0.9150681186599154,
+    "colsample_bytree": 0.7893006674033891,
+    "reg_lambda": 0.044875506355894976,
+    "reg_alpha": 1.5240442113845065
+  }
+}

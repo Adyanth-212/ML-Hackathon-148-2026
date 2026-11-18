@@ -1,0 +1,91 @@
+{
+  "objective": "maximise mean CV observation-level Top-1 (train, GroupKFold(5) by trip, harness folds)",
+  "model": "LightGBM (LGBMClassifier)",
+  "n_features": 36,
+  "sampler": {
+    "name": "tpe",
+    "seed": 148,
+    "n_startup_trials": 10,
+    "multivariate": true
+  },
+  "pruner": {
+    "name": "median",
+    "n_startup_trials": 10,
+    "n_warmup_steps": 1
+  },
+  "search_space": {
+    "n_estimators": {
+      "type": "int",
+      "low": 200,
+      "high": 1000,
+      "step": 50
+    },
+    "learning_rate": {
+      "type": "float",
+      "low": 0.01,
+      "high": 0.2,
+      "log": true
+    },
+    "num_leaves": {
+      "type": "int",
+      "low": 15,
+      "high": 255,
+      "log": true
+    },
+    "min_child_samples": {
+      "type": "int",
+      "low": 10,
+      "high": 400,
+      "log": true
+    },
+    "subsample": {
+      "type": "float",
+      "low": 0.5,
+      "high": 1.0
+    },
+    "colsample_bytree": {
+      "type": "float",
+      "low": 0.4,
+      "high": 1.0
+    },
+    "reg_lambda": {
+      "type": "float",
+      "low": 0.001,
+      "high": 30.0,
+      "log": true
+    },
+    "reg_alpha": {
+      "type": "float",
+      "low": 0.001,
+      "high": 10.0,
+      "log": true
+    }
+  },
+  "fixed": {
+    "objective": "binary",
+    "subsample_freq": 1
+  },
+  "n_trials": 40,
+  "n_complete": 40,
+  "n_pruned": 0,
+  "n_failed": 0,
+  "trial_compute_seconds_total": 5129.383801927001,
+  "wall_seconds_last_run": 5133.866141561999,
+  "baseline_trial_cv_top1": 0.8639287781245042,
+  "best_trial": 32,
+  "best_cv_top1": 0.865092638914793,
+  "best_params": {
+    "objective": "binary",
+    "subsample_freq": 1,
+    "n_estimators": 800,
+    "learning_rate": 0.014129111194342884,
+    "num_leaves": 254,
+    "min_child_samples": 20,
+    "subsample": 0.9150681186599154,
+    "colsample_bytree": 0.7893006674033891,
+    "reg_lambda": 0.044875506355894976,
+    "reg_alpha": 1.5240442113845065
+  },
+  "hardware": "8 CPU threads, n_jobs=-1",
+  "updated_utc": "2026-11-18T08:43:50+00:00"
+}
