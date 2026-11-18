@@ -150,6 +150,8 @@ if result and result.get("trip_id") == selected_trip:
         metric_values = body.get("metrics") or {}
 
         metric_order = [
+            ("top1_accuracy", "Point Top-1"),
+            ("candidate_miss_rate", "Candidate miss rate"),
             ("route_f1", "Route F1"),
             ("route_precision", "Route precision"),
             ("route_recall", "Route recall"),
