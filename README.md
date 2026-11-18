@@ -91,3 +91,52 @@ export PATHSNAP_API_URL=http://<laptop-1-ip>:8000
 ```
 
 Both laptops must be on the same network. Campus Wi-Fi often blocks traffic between devices, so a phone hotspot is the reliable fallback. Allow incoming connections for Python on Laptop 1 if the firewall asks. Check from Laptop 2 with `curl http://<laptop-1-ip>:8000/health`.
+
+## Tilak's API/UI deployment milestone
+
+The API starts with a nearest-directed-arc baseline when `artifacts/model.joblib`
+is absent. This is the deliberately simple end-to-end stub for the toy fixture;
+it is not the final learned map-matching model. The prediction pipeline accepts
+only GPS observations and network geometry. Evaluator reference routes are read
+inside `api/evaluation.py` only after prediction and are never included in the
+API response.
+
+### Windows setup (Laptop 1)
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+python -m pip install -e .
+$env:PATHSNAP_MODE = "serve"
+python -m uvicorn api.main:app --host 0.0.0.0 --port 8000
+```
+
+Or run `scripts/run_api.ps1` after activating the virtual environment. Allow
+Python through Windows Defender Firewall on private networks.
+
+### Windows setup (Laptop 2)
+
+Install only the UI dependencies, then point the UI to Laptop 1's LAN address:
+
+```powershell
+py -3.12 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+python -m pip install -r ui/requirements.txt
+$env:PATHSNAP_API_URL = "http://<laptop-1-ip>:8000"
+python -m streamlit run ui/app.py
+```
+
+### API verification
+
+With the API running and evaluator files installed on Laptop 1:
+
+```powershell
+$env:PATHSNAP_API_URL = "http://127.0.0.1:8000"
+python scripts/smoke_test_api.py
+```
+
+The smoke test calls `/predict` for every trip returned by `/trips`, verifies
+that one arc prediction is returned per GPS observation, and checks that
+server-side metrics are present. The toy-fixture integration tests run with
+`pytest` and do not require evaluator data.
