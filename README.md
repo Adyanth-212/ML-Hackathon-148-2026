@@ -73,9 +73,11 @@ python scripts/optimize.py             # Bayesian optimisation of LightGBM (Optu
 python scripts/models/advitha_lgbm_tuned.py  # tuned LightGBM through the harness
 python scripts/compare_tuning.py         # untuned vs tuned        -> experiments/results/tuning_comparison.csv
 python scripts/cv_compare.py             # comparison table + figures -> experiments/results/model_comparison.csv, experiments/figures/{model_comparison,cv_macro_f1,confusion_matrices}.png
+python scripts/eval_hmm.py              # HMM decoder tuned on train (out-of-fold scores) + classifier vs HMM -> configs/hmm.yaml, experiments/results/hmm_*.csv
 python scripts/export_artifacts.py       # selected model (best CV Top-1) -> artifacts/model.joblib, metadata.json
 python scripts/eval_pipeline.py          # predict_trip end to end on student_test -> experiments/results/pipeline_*.csv
 python scripts/make_maps.py --predicted  # report maps: reference vs predicted route -> maps/predicted_*.html
+python report/build_report.py           # final PDF from the results -> report/report.pdf (needs xelatex)
 ```
 
 **Adding a model:** write `scripts/models/<you>_<model>.py` that builds an sklearn-compatible estimator (scalers inside a `Pipeline`) and calls `pathsnap.harness.evaluate_model(name, family, estimator, config)`. The harness fixes the data, the folds (`experiments/results/cv_folds.csv`), the metrics and the output format, so every model is comparable. For slow models pass `max_train_obs=` to subsample training observations (recorded in the JSON).
