@@ -34,6 +34,7 @@ import pandas as pd
 from sklearn.base import clone
 from sklearn.metrics import confusion_matrix, f1_score, log_loss, precision_score, recall_score
 from sklearn.model_selection import GroupKFold
+from tqdm.auto import tqdm
 
 from .config import load_config, repo_path
 from .features import FEATURE_COLUMNS
@@ -148,7 +149,10 @@ def evaluate_model(name: str, family: str, estimator, config: dict, features: li
              for p in repo_path("data/processed/labels/train").glob("*.parquet")}
 
     folds = []
-    for k in sorted(set(fold)):
+    fold_ids = sorted(set(fold))
+    bar = tqdm(total=len(fold_ids) + 1, desc=name, unit="fit", disable=not verbose, dynamic_ncols=True)
+    for k in fold_ids:
+        bar.set_postfix_str(f"fitting fold {k}")
         tr_idx = np.flatnonzero(fold != k)
         va_idx = np.flatnonzero(fold == k)
         tr_idx = tr_idx[_subsample(tr.iloc[tr_idx], max_train_obs, rng)]
@@ -162,13 +166,18 @@ def evaluate_model(name: str, family: str, estimator, config: dict, features: li
         if train_score:
             row["train_macro_f1"] = candidate_metrics(y[tr_idx], _proba(est, X[tr_idx]))["macro_f1"]
         folds.append(row)
+        bar.update(1)
+        bar.set_postfix_str(f"fold {k}: F1 {row['macro_f1']:.4f} Top-1 {row['top1']:.4f} ({fit_s:.0f} s)")
         if verbose:
-            print(f"  [{name}] fold {k}: macro F1 {row['macro_f1']:.4f}, Top-1 {row['top1']:.4f}, fit {fit_s:.1f} s")
+            tqdm.write(f"  [{name}] fold {k}: macro F1 {row['macro_f1']:.4f}, Top-1 {row['top1']:.4f}, fit {fit_s:.1f} s")
 
     full_idx = _subsample(tr, max_train_obs, rng)
+    bar.set_postfix_str("final fit on all train")
     t0 = time.perf_counter()
     final = clone(estimator).fit(X[full_idx], y[full_idx])
     fit_s = time.perf_counter() - t0
+    bar.update(1)
+    bar.close()
 
     # student_test: per-trip inference timing (feature rows -> probabilities)
     proba, per_trip_ms = np.empty(len(te)), []
