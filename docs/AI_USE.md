@@ -1,0 +1,3 @@
+# AI-use disclosure
+
+- **Data foundation (Adyanth, branch `feat/adyanth-data`):** EDA, Folium maps, data-quality log, label alignment (`labels.py`), candidate generation (`candidates.py`), the R/K sweep and the Logistic Regression / Gaussian NB prototypes were implemented with Claude Code (Anthropic, model Claude Opus) under the team's direction. All numbers come from the scripts in this repo, run by us. The team has read this code and must be able to explain all of it in the viva.
