@@ -1,0 +1,5 @@
+# API server settings (Laptop 1).
+host: 0.0.0.0   # listen on all interfaces so Laptop 2 can reach it
+port: 8000
+artifacts_dir: artifacts
+cors_allow_origins: ["*"]  # tighten to the UI laptop's address if you like

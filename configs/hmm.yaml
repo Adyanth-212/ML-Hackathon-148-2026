@@ -1,0 +1,12 @@
+# HMM / Viterbi decoder parameters. PLACEHOLDERS: tune on training and
+# student-test trips only (never on evaluator trips).
+emission:
+  prob_floor: 1.0e-6     # epsilon so log(p) never becomes -inf
+  distance_sigma_m: 10.0 # Gaussian GPS-noise term, if blended with classifier probs
+  classifier_weight: 1.0 # alpha: 1.0 = classifier probabilities only
+transition:
+  beta_m: 20.0           # scale of |network distance - straight-line distance|
+  max_route_factor: 2.0  # Dijkstra cutoff = factor * straight-line + slack
+  route_slack_m: 200.0
+gaps:
+  break_seconds: 30.0    # split the HMM when consecutive points are this far apart in time

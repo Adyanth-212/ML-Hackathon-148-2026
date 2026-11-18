@@ -1,0 +1,22 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Raw dataset stays local (keep the folder placeholders)
+data/raw/**
+!data/raw/*/
+!data/raw/*/.gitkeep
+
+# Secrets and local config
+.env
+*.env
+!*.example.env
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/

@@ -1,0 +1,5 @@
+# Laptop 2 only needs the UI dependencies (no model, no data).
+streamlit
+streamlit-folium
+folium
+requests
