@@ -1,7 +1,22 @@
-"""Sudhe model: Random Forest."""
-from sklearn.ensemble import RandomForestClassifier
-from _sudhe_models import run_model
+"""Sudhe model: Random Forest.
 
-CONFIG = {"n_estimators": 120, "max_depth": 18, "min_samples_leaf": 2, "class_weight": "balanced", "random_state": 148, "n_jobs": -1}
+    python scripts/models/sudhe_random_forest.py
+
+Why: averages many deep trees grown on bootstrap samples with random feature subsets; low
+variance, no scaling, a bagging counterpart to the boosting models.
+Hyperparameters are Sudhe's; evaluation goes through the shared harness (36 features, fixed
+trip folds, same Top-1 definition) so the result is comparable with every other model.
+"""
+from sklearn.ensemble import RandomForestClassifier
+
+from pathsnap.harness import SEED, evaluate_model
+
+CONFIG = {"n_estimators": 120, "max_depth": 18, "min_samples_leaf": 2, "class_weight": "balanced"}
+
+
+def build():
+    return RandomForestClassifier(**CONFIG, random_state=SEED, n_jobs=-1)
+
+
 if __name__ == "__main__":
-    run_model("sudhe_random_forest", RandomForestClassifier(**CONFIG), CONFIG)
+    evaluate_model("sudhe_random_forest", "bagged trees (Random Forest)", build(), CONFIG)
