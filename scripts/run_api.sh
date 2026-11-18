@@ -3,6 +3,6 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export PATHSNAP_MODE=serve
-echo "Laptop 1 IP addresses (give one of these to the UI):"
-(ipconfig getifaddr en0 2>/dev/null || hostname -I 2>/dev/null || true)
-exec .venv/bin/uvicorn api.main:app --host 0.0.0.0 --port "${PORT:-8000}"
+printf 'PathSnap API · laptop addresses:\n'
+(hostname -I 2>/dev/null || true)
+exec .venv/bin/python -m uvicorn api.main:app --host 0.0.0.0 --port "${PORT:-8000}"
