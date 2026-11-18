@@ -75,41 +75,21 @@ At inference time use `generate_candidates(TripGeometry.from_trip(trip), trip_id
 
 ## 5. Features
 
-Grain: **one row per (GPS point, candidate road)**. The columns `dist_m` and `proj_frac` come straight from the candidate table.
+Grain: **one row per (GPS point, candidate road)**: the candidate table plus 36 numeric features from `pathsnap.features.build_features(geom, cands)`. The ordered list is in [`artifacts/feature_list.json`](artifacts/feature_list.json); build the table with `python scripts/build_dataset.py` (about 2 s; written to `data/processed_local/features/`, gitignored). Everything uses only GPS and road-network geometry in per-trip UTM metres; labels are never read (there is a test for this).
 
-### 5.1 Features currently in the shared code (`scripts/models/_adyanth_proto.py`, used for the prototype models)
+| Group | Features | Why |
+|---|---|---|
+| distance | `dist_m`, `dist_rank`, `dist_minus_min`, `dist_ratio_min`, `proj_frac`, `proj_outside`, `dist_from_node_m`, `dist_to_node_m`, `dist_over_len` | the point should be close to the true arc, and closer than its competitors |
+| direction | `heading_cos` (central difference), `heading_cos_prev`, `heading_cos_next`, `heading_valid`, `heading_cos_gap` | about half the candidate rows are twins (an arc and its reverse) with identical distance; only direction separates them |
+| context | `ctx_mean_dist_m`, `ctx_max_dist_m`, `ctx_mean_gap_m` (points t-2..t+2 against the same arc) | one noisy point can sit near the wrong road; its neighbours usually do not |
+| motion | `dt_prev_s`, `dt_next_s`, `speed_prev_mps`, `speed_next_mps`, `accel_mps2`, `turn_deg` | speed and turning say what kind of road the vehicle is on and when it is at a junction |
+| network | `arc_length_m`, `from_in_deg`, `from_out_deg`, `to_in_deg`, `to_out_deg`, `has_reverse` | road and junction structure |
+| sequence | `prev_rule_same`, `prev_rule_adjacent`, `next_rule_same`, `next_rule_adjacent` | agreement with the neighbouring points' best arc under a label-free rule (distance + heading) |
+| density | `n_candidates`, `n_within_10m`, `n_within_25m` | ambiguity from parallel roads and dense junctions |
 
-| Feature | Meaning |
-|---|---|
-| `dist_m` | distance from the point to the arc (m) |
-| `dist_rank` | rank of this candidate among the point's candidates by distance (0 = nearest) |
-| `dist_minus_min` | `dist_m` minus the nearest candidate's distance for the same point |
-| `proj_frac` | projection fraction along the arc (unclipped) |
-| `proj_outside` | 1 if `proj_frac` is below 0 or above 1 |
-| `n_candidates` | how many candidates the point has |
-| `heading_cos` | cosine of the angle between the GPS heading and the arc direction (0 if the heading is unknown) |
-| `heading_valid` | 1 if the point moved at least 5 m between its neighbours, so the heading is trusted |
-| `heading_cos_gap` | the best `heading_cos` among this point's candidates minus this candidate's |
+The motion, endpoint-distance, arc-length and previous/next heading-error features come from Advitha's first draft (`pathsnap_features/`, now replaced). They are computed on the shared candidate table, so every model sees the same rows. Class separation of every feature on TRAIN: `experiments/results/feature_summary.csv`.
 
-**Why direction matters:** about half the candidate rows are twins (an arc and its reverse) with identical `dist_m` and mirrored `proj_frac`. Only direction features can tell them apart. In the prototype results, adding the three heading features raised Logistic Regression student-test Top-1 from 0.54 to 0.85 (`experiments/results/models/`, `docs/HANDOFF_ADYANTH.md`).
-
-### 5.2 Advitha's feature module (branch `feat/advitha`, folder `pathsnap_features/`, not merged yet)
-
-Per GPS point (motion): `dt_prev_s`, `dt_next_s`, `gps_distance_prev_m`, `gps_distance_next_m`, `speed_prev_mps`, `speed_next_mps`, `acceleration_mps2`, `gps_bearing_prev_deg`, `gps_bearing_next_deg`, `gps_bearing_change_deg`.
-Per candidate: `distance_to_arc_m`, `projection_fraction`, `distance_to_from_node_m`, `distance_to_to_node_m`, `arc_length_m`, `arc_bearing_deg`, `candidate_rank`.
-Derived: `heading_error_prev_deg`, `heading_error_next_deg`, `distance_ratio_to_arc_length`, `speed_change_mps`.
-
-### 5.3 To reconcile before the shared model harness
-
-The module in 5.2 was written against a different data layout and differs from the shared preprocessing. Before everyone uses one feature table, align these points:
-
-- **Files:** it opens `track`, `nodes`, `arcs` without the id prefix and extension. In this repo the files are `<id>.track` and so on, inside one folder per trip.
-- **Candidates:** it builds its own (nearest 8, within 250 m, from a brute-force search) instead of the frozen table (R = 60 m, K = 30). Features should be computed on the shared candidate table so every model sees the same rows.
-- **Projection:** it uses a local approximation around each point instead of the per-trip UTM projection.
-- **Rows:** it sorts the track by time and drops rows that fail its checks. Shared preprocessing deletes nothing, because `obs_idx` must stay equal to the row number for the label join.
-- **Labels:** it creates none. Join the label table (and drop `is_outlier` points) so the model has a target.
-
-The motion and heading features in 5.2 are good additions; the suggestion is to compute them on top of the shared candidate table and keep the single feature list in `artifacts/feature_list.json`.
+**Evaluating a model:** call `pathsnap.harness.evaluate_model(name, family, estimator, config)` from `scripts/models/<you>_<model>.py`. It applies the rules in section 4 (same folds for everyone, saved in `experiments/results/cv_folds.csv`) and writes `experiments/results/models/<name>.json`. `python scripts/cv_compare.py` builds the comparison table. Details and current results: [`docs/HANDOFF_FEATURES_HARNESS.md`](docs/HANDOFF_FEATURES_HARNESS.md).
 
 ## 6. Where things are
 
@@ -119,6 +99,7 @@ The motion and heading features in 5.2 are good additions; the suggestion is to 
 | Full requirements and design | [`docs/PLAN.md`](docs/PLAN.md) |
 | Data issues, assumptions, decisions with evidence | [`docs/data_quality_log.md`](docs/data_quality_log.md) |
 | What the data foundation provides, runtimes | [`docs/HANDOFF_ADYANTH.md`](docs/HANDOFF_ADYANTH.md) |
+| Features, harness, model results | [`docs/HANDOFF_FEATURES_HARNESS.md`](docs/HANDOFF_FEATURES_HARNESS.md), `experiments/results/model_comparison.csv` |
 | Notebooks: raw to candidate table (00), EDA (01), labels and candidates (02) | `notebooks/` |
 | Figures and CSV results | `experiments/figures/`, `experiments/results/` |
 | Folium maps | `maps/` |

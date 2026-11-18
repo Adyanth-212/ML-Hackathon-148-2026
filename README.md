@@ -6,7 +6,7 @@ PathSnap matches noisy GPS trajectories to a road network. It generates candidat
 
 > **Team split and workflow: see [SPLIT.md](SPLIT.md). Data, preprocessing and features: see [REFERENCE.md](REFERENCE.md).**
 >
-> **Status:** project foundation (loaders, geometry, network analysis, dataset inventory, API/UI skeletons). Candidate generation, features, models, HMM and evaluation are still to be built; see the TODO docstrings in `src/pathsnap/`.
+> **Status (Review 1):** data foundation, EDA, maps, labels, candidates, feature table, shared evaluation harness and five classifiers are done (`experiments/results/model_comparison.csv`). `pipeline.predict_trip` works end to end with a rule-based scorer. Still to do: Bayesian optimisation, HMM/Viterbi, model export into the pipeline, the remaining models (RF/ET/DT, KNN/MLP), API/UI integration and the report.
 
 ## Repository layout
 

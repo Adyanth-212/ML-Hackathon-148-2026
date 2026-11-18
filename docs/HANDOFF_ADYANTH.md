@@ -13,7 +13,7 @@ Branch `feat/adyanth-data`. Everything below runs from a clean clone after `pip 
 | Label maps | `scripts/make_maps.py --labels` | `maps/labels_*.html` (7 trips) | ~10 s |
 | R/K sweep | `scripts/candidate_sweep.py` | `experiments/results/candidate_miss_rate.csv`, figure | ~2 s |
 | Candidates | `src/pathsnap/candidates.py`, `scripts/build_candidates.py` | `data/processed/candidates/<part>/<trip>.parquet`, `experiments/results/candidate_stats.csv` | ~1.5 s |
-| LogReg / GNB | `scripts/models/adyanth_{logreg,gnb}.py` (+ `_adyanth_proto.py`) | `experiments/results/models/adyanth_*.json` | ~13 s / ~9 s |
+| LogReg / GNB | `scripts/models/adyanth_{logreg,gnb}.py` via `pathsnap.harness` | `experiments/results/models/adyanth_*.json`, `ablation_*.json` | ~90 s / ~10 s |
 
 Geometry helper for everyone: `pathsnap.geo.TripGeometry(track, nodes, arcs)` projects one trip to its UTM zone once and exposes `obs_x/obs_y`, `node_x/node_y`, arc endpoints `ax, ay, bx, by`, `arc_lengths()`, `obs_arc_distance(obs, arcs)` and `distance_matrix(arc_ids)`.
 
@@ -31,23 +31,7 @@ At inference time call `generate_candidates(TripGeometry.from_trip(trip), trip_i
 
 - Labels: median distance to the aligned arc 4.75 m (median over trips). 11.1% of train points (5 trips account for most) and 0.14% of student_test points are > 50 m from the route, mostly because the **reference route covers only part of the GPS track** in trips 00000054, 00000033 and 00000002.
 - Candidates: mean 11.75 per point (train), 12.74 (student_test). Miss rate on reliable labels: train 0.029%, student_test 0.000%; all points: 6.46% / 0.13%.
-- Prototype models (outlier observations dropped, GroupKFold(5, shuffle, seed 148), student_test held out). `dist` = distance-only features; `_dir` adds `heading_cos, heading_valid, heading_cos_gap` (GPS heading vs arc direction):
-
-| model | CV macro F1 (mean ± std) | train F1 | CV Top-1 | student_test Top-1 | Top-1 counting reverse twin | st. macro F1 | st. log loss | fit s | ms / trip |
-|---|---|---|---|---|---|---|---|---|---|
-| LogReg, dist | 0.767 ± 0.008 | 0.767 | 0.566 | 0.539 | 0.875 | 0.766 | 0.257 | 1.1 | 2.7 |
-| **LogReg, dist + dir** | 0.839 ± 0.014 | 0.839 | 0.825 | **0.846** | 0.903 | 0.842 | **0.159** | 2.1 | 8.5 |
-| GNB, dist | 0.769 ± 0.007 | 0.769 | 0.555 | 0.529 | 0.875 | 0.770 | 0.748 | 0.2 | 3.3 |
-| GNB, dist + dir | 0.865 ± 0.015 | 0.865 | 0.818 | 0.830 | 0.900 | 0.870 | 0.284 | 0.3 | 9.5 |
-| nearest-arc rule (not ML) | – | – | – | 0.530 | 0.875 | – | – | – | – |
-| nearest + heading rule (not ML, w = 20 m) | – | – | – | 0.832 | – | – | – | – | – |
-
-  Reading:
-  - With distance-only features both models are no better than "pick the nearest arc"; almost every error is the reverse twin of the right arc. Adding three direction features lifts Top-1 by about 0.3 and roughly halves the twin-related errors.
-  - LogReg + direction beats the hand-tuned heading rule (0.846 vs 0.832) and has the best log loss, which is what matters for HMM emissions.
-  - GNB has the higher candidate-level macro F1 (threshold 0.5) but the lower Top-1 and much worse log loss. Its independence assumption produces over-confident, poorly ranked probabilities on correlated features: a good example of why macro F1 and Top-1 can disagree.
-  - Train and CV F1 are equal, so neither model overfits. Both underfit, since they are linear or near-linear in the features.
-  - The JSONs for the `dist` runs are the ablation and stay as documented results.
+- Models: the prototype in `scripts/models/_adyanth_proto.py` has been replaced by the shared harness (`src/pathsnap/harness.py`). Current results for LogReg, GNB, the boosting models and the feature-group ablations are in `experiments/results/model_comparison.csv` and [`docs/HANDOFF_FEATURES_HARNESS.md`](HANDOFF_FEATURES_HARNESS.md). Key finding, unchanged: distance-only features give no more than the nearest-arc rule (Top-1 ~0.54); direction features add ~0.30.
 
 ## Baseline pipeline (works now)
 
@@ -60,7 +44,7 @@ At inference time call `generate_candidates(TripGeometry.from_trip(trip), trip_i
 ## For the others
 
 - **Advitha (features):** the single most important feature is **direction** (measured above: +0.3 Top-1): the angle between the GPS heading (central difference, ignore points that moved < 5 m) and the arc bearing. Without it, Top-1 is capped near 0.53 because about 92% of arcs have an identical reverse twin. `labels.heading_mismatch(geom, arc_ids, min_move_m)` already computes `(1 - cos)/2` vectorised; feel free to reuse it. Clip or robustify speed features: trips 00000032/00000013/00000001 have sustained steps > 60 m/s.
-- **Advitha (harness):** drop `is_outlier` observations from training and evaluation (or report both) and record the count, as `_adyanth_proto.py` does. My CV used `GroupKFold(n_splits=5, shuffle=True, random_state=148)`; if the harness uses a different fold assignment, my JSONs will be regenerated through it. Once `harness.py` is on main, I'll switch `scripts/models/adyanth_*.py` to it.
+- **Harness:** done (`src/pathsnap/harness.py`); it drops `is_outlier` observations and records the counts, with `GroupKFold(5, shuffle=True, random_state=148)` by trip.
 - **Sudhe (HMM):** 198 train observations have no candidate even at 150 m (student_test: 0). Gaps > 30 s: 135 in train; the label aligner treats them as free skips, which suggests breaking or relaxing transitions there too. Networks have up to 421 weak components, so expect unreachable transitions.
 - **Tilak (API):** maps only draw arcs within 200 m of the track (`viz.arcs_near_track`), which keeps the HTML small for 300k-arc networks. The basemap uses Esri Light Gray tiles, because OSM tiles return 403 from `file://` and CARTO now needs a key.
 
