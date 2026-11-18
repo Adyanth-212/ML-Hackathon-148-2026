@@ -15,6 +15,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import numpy as np
 import pandas as pd
 
 from pathsnap.config import repo_path
@@ -84,7 +85,75 @@ def main() -> int:
     fig.suptitle("Model comparison (light bars = feature-group ablations)", x=0.01, ha="left", fontsize=11, color=INK)
     fig.tight_layout()
     fig.savefig(repo_path("experiments/figures/model_comparison.png"), dpi=140)
+    plt.close(fig)
+    results = {d["name"]: d for d in (json.loads(p.read_text())
+                                      for p in sorted(repo_path("experiments/results/models").glob("*.json")))}
+    models = [m for m in df[df.cv_macro_f1_mean.notna() & ~df.is_ablation.astype(bool)].model]
+    plot_cv_f1(models, results)
+    plot_confusion(models, results)
     return 0
+
+
+def _clean(ax):
+    for s in ("top", "right"):
+        ax.spines[s].set_visible(False)
+    ax.tick_params(colors=MUTED, labelsize=8)
+
+
+def plot_cv_f1(models: list[str], results: dict) -> None:
+    """CV macro F1 per model: large dot = mean, whisker = std over the 5 folds, small dots = each fold.
+    (A dot plot, not bars, because the axis does not start at 0.)"""
+    order = sorted(models, key=lambda n: results[n]["cv"]["macro_f1_mean"])
+    fig, ax = plt.subplots(figsize=(8, 0.5 * len(order) + 1.4))
+    for y, n in enumerate(order):
+        cv = results[n]["cv"]
+        ax.scatter(cv["macro_f1_folds"], [y] * len(cv["macro_f1_folds"]), s=12, color=ABL, zorder=2)
+        ax.errorbar(cv["macro_f1_mean"], y, xerr=cv["macro_f1_std"], fmt="o", color=BAR, ms=7,
+                    ecolor=INK, elinewidth=1, capsize=3, zorder=3)
+        ax.text(max(cv["macro_f1_folds"]) + 0.004, y, f"{cv['macro_f1_mean']:.3f} ± {cv['macro_f1_std']:.3f}",
+                va="center", fontsize=8, color=INK)
+    ax.set_yticks(range(len(order)), order)
+    ax.tick_params(axis="y", colors=INK, labelsize=9)
+    lo = min(min(results[n]["cv"]["macro_f1_folds"]) for n in order)
+    ax.set_xlim(max(0, lo - 0.03), 1.0)
+    ax.set_xlabel("macro F1 at threshold 0.5 (candidate level)", color=MUTED, fontsize=8)
+    ax.set_title("CV macro F1, TRAIN, GroupKFold(5) by trip: mean ± std (blue), each fold (light)", loc="left",
+                 fontsize=10, color=INK)
+    ax.grid(axis="x", color="#d0d7de", lw=0.6)
+    ax.set_axisbelow(True)
+    _clean(ax)
+    fig.tight_layout()
+    fig.savefig(repo_path("experiments/figures/cv_macro_f1.png"), dpi=140)
+    plt.close(fig)
+
+
+def plot_confusion(models: list[str], results: dict) -> None:
+    """Student-test confusion matrices (threshold 0.5), row-normalised colour, counts printed."""
+    order = sorted(models, key=lambda n: -results[n]["student_test"]["top1"])
+    cols = min(4, len(order))
+    rows = -(-len(order) // cols)
+    fig, axs = plt.subplots(rows, cols, figsize=(3.1 * cols, 3.0 * rows), squeeze=False)
+    for ax in axs.flat[len(order):]:
+        ax.axis("off")
+    for ax, n in zip(axs.flat, order):
+        cm = np.array(results[n]["student_test"]["confusion_matrix"], dtype=float)
+        norm = cm / cm.sum(axis=1, keepdims=True)
+        ax.imshow(norm, cmap="Blues", vmin=0, vmax=1)
+        for i in range(2):
+            for j in range(2):
+                ax.text(j, i, f"{int(cm[i, j]):,}\n{norm[i, j]:.1%}", ha="center", va="center", fontsize=8,
+                        color="white" if norm[i, j] > 0.55 else INK)
+        ax.set_xticks([0, 1], ["pred 0", "pred 1"])
+        ax.set_yticks([0, 1], ["true 0", "true 1"])
+        ax.tick_params(labelsize=8, colors=MUTED, length=0)
+        ax.set_title(f"{n}\nTop-1 {results[n]['student_test']['top1']:.3f}", fontsize=9, color=INK)
+        for s in ax.spines.values():
+            s.set_visible(False)
+    fig.suptitle("Confusion matrices, STUDENT_TEST candidates, threshold 0.5 (row-normalised; 1 = true arc)",
+                 x=0.01, ha="left", fontsize=10, color=INK)
+    fig.tight_layout()
+    fig.savefig(repo_path("experiments/figures/confusion_matrices.png"), dpi=140)
+    plt.close(fig)
 
 
 if __name__ == "__main__":
