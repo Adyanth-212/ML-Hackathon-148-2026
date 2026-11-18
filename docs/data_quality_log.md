@@ -74,4 +74,44 @@ Quality (all 90 trips): median distance to the aligned arc 4.75 m (median of tri
 - Points > 50 m from their aligned arc are flagged `is_outlier` but keep their label. Train: 23,165 of 208,417 points (11.1%), student_test: 27 of 19,160 (0.14%). **They are concentrated in five trips**: 00000054 (89%), 00000033 (59%), 00000002 (12%), 00000066 (9%), 00000043 (7%); 85 of 90 trips have < 5%.
 - Cause, checked on the maps and numerically: in 00000054, 00000033 and 00000002 those points are > 50 m from *every* route arc (87%, 59%, 12% of points), i.e. the **reference route covers only part of the GPS track**. This is a limitation of the reference data, not an alignment failure; the labels for those points are meaningless.
 - Decision: labels stay as they are (contract), and the per-observation flag lives in `data/processed/labels/<partition>/<trip>.parquet` (`obs_idx, route_pos, arc_id, dist_m, is_outlier, after_gap`). **Recommendation for training and evaluation:** drop observations with `is_outlier == True` (join on `trip_id, obs_idx`), and report how many were dropped. Student-test is barely affected (0.14%).
-- 90% of non-outlier points are aligned to the nearest route arc; where they are not, the aligned arc is almost always within 0.5 m of the nearest one (97% of points), i.e. ties between twin arcs or at corners resolved by route order and heading.
+- Per trip, a median of 94% of non-outlier points (mean 91%) are aligned to the geometrically nearest route arc; where they are not, the aligned arc is usually within 0.5 m of the nearest one (median 98% of points per trip), i.e. ties between twin arcs or at corners resolved by route order and heading.
+
+## 8. Candidate generation and the choice of R and K (milestone 3)
+Source: `src/pathsnap/candidates.py`, `scripts/candidate_sweep.py` -> `experiments/results/candidate_miss_rate.csv`, `experiments/figures/candidate_miss_rate.png`; `scripts/build_candidates.py` -> `data/processed/candidates/<partition>/<trip>.parquet`, `experiments/results/candidate_stats.csv`.
+
+Method: shapely `STRtree` over each trip's projected arc segments; `dwithin` query, exact point-to-segment distance, rows ordered by `(dist_m, arc_id)` per observation, keep the first K. No candidate within R: one retry at the fallback radius; still nothing: zero rows, counted in `n_no_candidates`.
+
+**R and K were chosen on TRAIN only.** The miss rate is the share of observations whose aligned arc is not in the candidate set. It was computed on all train observations and on those with reliable labels (`is_outlier == False`, section 7); the choice uses the reliable subset because the outlier labels are not meaningful (they are > 50 m from the route by definition).
+
+Reliable train observations, miss rate (%) / mean candidates:
+
+| R \ K | 5 | 10 | 15 | 20 | 30 |
+|---|---|---|---|---|---|
+| 25 m | 3.96 / 3.4 | 2.60 / 4.4 | 2.45 / 4.7 | 2.39 / 4.8 | 2.35 / 4.9 |
+| 40 m | 2.54 / 4.0 | 0.98 / 5.8 | 0.77 / 6.7 | 0.64 / 7.2 | 0.59 / 7.5 |
+| 60 m | 2.33 / 4.3 | 0.73 / 7.0 | 0.51 / 8.7 | 0.29 / 9.8 | **0.03 / 11.1** |
+| 80 m | 2.33 / 4.5 | 0.73 / 7.7 | 0.51 / 10.0 | 0.29 / 11.7 | 0.03 / 14.1 |
+
+- Radius: the miss rate stops falling at R = 60 m for every K (no reliable label is beyond 50 m by construction, and GPS error is ~5 m median, ~15 m p95), while every extra 20 m adds 1.5-3 candidates per point. R = 60 m is the knee.
+- K: K = 5 misses 2.3% even at large R, because two-way streets and junctions put several arcs at almost the same distance (each road appears twice, with identical geometry). Going from K = 20 to K = 30 cuts the miss rate tenfold (0.29% -> 0.03%) for +1.3 candidates per point; beyond that there is nothing left to gain. K = 30 chosen.
+- Fallback radius 150 m: on all train points, 8.4% have no arc within 60 m, but only 0.12% have none within 120 m. These are almost all in the trips where the GPS leaves the area the network was cut for (section 7).
+- Final: **R = 60 m, K = 30, fallback 150 m** (`configs/candidates.yaml`).
+
+Result (`candidate_stats.csv`):
+
+| | train | student_test |
+|---|---|---|
+| rows | 2,449,078 | 244,176 |
+| mean candidates / point | 11.75 | 12.74 |
+| miss rate, all points | 6.46% | 0.13% |
+| miss rate, reliable labels | 0.029% | 0.000% |
+| points rescued by the fallback | 17,294 | 0 |
+| points with no candidate | 198 | 0 |
+| parquet size (zstd) | 26.6 MB | 2.7 MB |
+
+The student_test row is a check only; it played no part in the choice. The candidate tables are small enough to commit, so teammates can use them straight away. Build time: about 1-2 s for all 90 trips on 8 cores (labels + candidates).
+
+Notes for the feature/model owners:
+- About half the rows are twins (an arc and its reverse) with identical `dist_m`, and `proj_frac` mirrored (t vs 1 - t). Only direction features (GPS heading vs arc bearing) can separate them.
+- Each observation has at most one `label == 1`. Observations without a positive row are the misses above; for training, keep or drop them consistently, and drop `is_outlier` observations (join `data/processed/labels/...` on `trip_id, obs_idx`).
+- `proj_frac` is unclipped: < 0 or > 1 means the nearest point is an arc endpoint.
