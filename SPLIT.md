@@ -34,7 +34,7 @@ That is 9-11 models from different families, well above the required 5. One fami
 
 ### Adyanth: data foundation (critical path for Review 1)
 Files: `src/pathsnap/{io,geo,network,labels,candidates,viz,pipeline}.py`, `scripts/inventory.py`, `scripts/make_maps.py`, `notebooks/01_eda.ipynb`, `notebooks/02_labels_candidates.ipynb`, `maps/`, `scripts/models/adyanth_*.py`
-1. Get the dataset into `data/raw/` and run `scripts/inventory.py`. Confirm file formats against the real files (column order, whether each trip has its own network).
+1. The dataset is already in the repo (`data/raw/train`, `data/raw/student_test`). Run `scripts/inventory.py` (output: `experiments/results/inventory.csv`).
 2. Full EDA: missing values, time gaps, extents, network connectivity, anomalous trips, Folium maps, data-quality log.
 3. `labels.py`: align each GPS point to one route arc (monotonic DP). Check visually on maps.
 4. `candidates.py`: radius R and max K chosen by candidate miss rate on training trips.
@@ -114,7 +114,7 @@ All models are evaluated the same way:
 
 | Step | Who | Goal |
 |---|---|---|
-| 1 | Everyone | Clone, set up the environment, put the dataset in `data/raw/`, run `pytest`, create your branch |
+| 1 | Everyone | Clone (the dataset comes with it), set up the environment, run `pytest`, create your branch |
 | 2 | Adyanth | Inventory + EDA + labels + candidate table (push early) |
 | 2 | Advitha | Draft `features.py` on the toy fixture, then on real data once candidates land |
 | 2 | Sudhe | `metrics.py` + first Viterbi with distance-only emissions on the toy fixture |

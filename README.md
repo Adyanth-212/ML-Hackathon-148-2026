@@ -41,7 +41,7 @@ On macOS, LightGBM and XGBoost need OpenMP: `brew install libomp`.
 
 ## Data
 
-Put each partition's raw files in its folder. Trips can be flat (`data/raw/train/<id>.track`, `<id>.nodes`, …) or one sub-folder per trip. The loader pairs files by name.
+`train` (80 trips) and `student_test` (10 trips) are committed in the repo (about 90 MB). `evaluator` is never committed; put those files in `data/raw/evaluator/` on Laptop 1 only. Trips can be flat (`data/raw/train/<id>.track`, `<id>.nodes`, …) or one sub-folder per trip. The loader pairs files by name.
 
 ```
 data/raw/train/          80 trips: fitting, cross-validation, tuning

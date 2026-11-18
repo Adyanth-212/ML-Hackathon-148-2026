@@ -6,10 +6,12 @@ __pycache__/
 .pytest_cache/
 .ipynb_checkpoints/
 
-# Raw dataset stays local (keep the folder placeholders)
-data/raw/**
-!data/raw/*/
-!data/raw/*/.gitkeep
+# train and student_test raw data ARE tracked. The evaluator partition must never be committed.
+data/raw/evaluator/**
+!data/raw/evaluator/.gitkeep
+
+# Large derived data (rebuild with the scripts)
+data/processed_local/
 
 # Secrets and local config
 .env

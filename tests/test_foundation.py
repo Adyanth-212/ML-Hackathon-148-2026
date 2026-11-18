@@ -42,7 +42,8 @@ def test_projection_matches_haversine():
     x, y = proj.forward([77.590, 77.591], [12.930, 12.930])
     planar = float(np.hypot(x[1] - x[0], y[1] - y[0]))
     great_circle = float(haversine_m(77.590, 12.930, 77.591, 12.930))
-    assert abs(planar - great_circle) / great_circle < 1e-3
+    # haversine assumes a sphere; UTM uses the WGS84 ellipsoid, so allow ~0.5%
+    assert abs(planar - great_circle) / great_circle < 5e-3
     lon, lat = proj.inverse(x, y)
     assert np.allclose(lon, [77.590, 77.591]) and np.allclose(lat, [12.930, 12.930])
 
