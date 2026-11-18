@@ -1,0 +1,14 @@
+# Where each dataset partition lives (paths are relative to the repo root).
+# Drop the raw trip files into these folders; they are gitignored.
+partitions:
+  train: data/raw/train               # 80 trips: fitting, CV, Bayesian optimisation
+  student_test: data/raw/student_test # 10 trips: development-stage comparison
+  evaluator: data/raw/evaluator       # 10 trips: final evaluation ONLY (API serve mode)
+
+# Global random seed used by every script (record it in experiment logs).
+seed: 148
+
+# Group-aware cross-validation on the training partition.
+cv:
+  n_splits: 5
+  group_by: trip_id

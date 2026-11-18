@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# train and student_test raw data ARE tracked. The evaluator partition must never be committed.
+data/raw/evaluator/**
+!data/raw/evaluator/.gitkeep
+
+# Large derived data (rebuild with the scripts)
+data/processed_local/
+
+# Secrets and local config
+.env
+*.env
+!*.example.env
+
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
