@@ -1,3 +1,4 @@
+
 """Inference pipeline used by the API.
 
 The first deployment milestone deliberately uses a nearest-directed-arc baseline.
@@ -7,10 +8,12 @@ The returned payload is compatible with the later classifier/HMM integration.
 from __future__ import annotations
 
 import time
-
 import numpy as np
+import pandas as pd
 
-from .geo import LocalProjector, point_segment_distance
+from .candidates import generate_candidates
+from .geo import LocalProjector, TripGeometry
+from .labels import obs_heading
 
 
 def _deduplicate(values: list[int]) -> list[int]:
@@ -21,104 +24,255 @@ def _deduplicate(values: list[int]) -> list[int]:
             out.append(value)
     return out
 
+def fill_missing(pred: np.ndarray, timestamps: np.ndarray) -> np.ndarray:
+        """Fill missing predictions from the nearest-in-time observed prediction."""
+        have = np.flatnonzero(pred >= 0)
+
+        if len(have) == 0 or len(have) == len(pred):
+            return pred
+
+        out = pred.copy()
+        missing = np.flatnonzero(pred < 0)
+
+        positions = np.searchsorted(timestamps[have], timestamps[missing])
+
+        left = have[np.clip(positions - 1, 0, len(have) - 1)]
+        right = have[np.clip(positions, 0, len(have) - 1)]
+
+        use_right = (
+            np.abs(timestamps[right] - timestamps[missing])
+            < np.abs(timestamps[missing] - timestamps[left])
+        )
+
+        out[missing] = np.where(use_right, pred[right], pred[left])
+        return out
+
+BASELINE_HEADING_WEIGHT_M = 20.0
+HEADING_MIN_MOVE_M = 5.0
+
+
+def baseline_scores(geom, cands, heading_weight_m=BASELINE_HEADING_WEIGHT_M):
+    """Score candidates using distance and GPS/road heading agreement."""
+    scores = -cands["dist_m"].to_numpy(dtype=np.float64)
+
+    if heading_weight_m > 0 and len(cands):
+        obs = cands["obs_idx"].to_numpy(dtype=np.int64)
+        arc = cands["arc_id"].to_numpy(dtype=np.int64)
+
+        ux, uy, valid = obs_heading(geom, HEADING_MIN_MOVE_M)
+
+        vx = geom.bx[arc] - geom.ax[arc]
+        vy = geom.by[arc] - geom.ay[arc]
+        length = np.hypot(vx, vy)
+
+        with np.errstate(invalid="ignore", divide="ignore"):
+            cosine = (ux[obs] * vx + uy[obs] * vy) / length
+
+        mismatch = (1.0 - cosine) / 2.0
+        mismatch = np.where(valid[obs] & (length > 0), mismatch, 0.0)
+
+        scores -= heading_weight_m * mismatch
+
+    return scores
+
+
+def argmax_per_obs(cands, scores, n_obs):
+    """Select the highest-scoring candidate for each GPS observation."""
+    pred = np.full(n_obs, -1, dtype=np.int64)
+
+    if len(cands):
+        ranked = pd.DataFrame({
+            "obs": cands["obs_idx"].to_numpy(),
+            "arc": cands["arc_id"].to_numpy(),
+            "score": np.asarray(scores),
+        })
+
+        best = ranked.loc[
+            ranked.groupby("obs", sort=False)["score"].idxmax()
+        ]
+
+        pred[best["obs"].to_numpy(dtype=np.int64)] = (
+            best["arc"].to_numpy(dtype=np.int64)
+        )
+
+    return pred
+
 
 def predict_trip(trip, artifacts=None) -> dict:
-    """Predict one arc per GPS observation using the nearest-arc baseline.
-
-    Parameters
-    ----------
-    trip:
-        A :class:`pathsnap.io.Trip` with track, nodes and directed arcs. Its
-        ``route`` attribute is intentionally never read.
-    artifacts:
-        Reserved for the trained classifier/HMM bundle. ``None`` or a bundle
-        with ``mode='nearest_arc'`` selects the milestone baseline.
-
-    Returns
-    -------
-    dict
-        JSON-safe coordinates, per-observation arc ids, a de-duplicated route,
-        a lightweight nearby-network overlay and stage timings.
-    """
+    """Predict one arc per GPS observation without accessing ground truth."""
+    artifacts = artifacts or {}
     started = time.perf_counter()
+    timings = {}
+
     if trip.track is None or trip.track.empty:
         raise ValueError(f"Trip {trip.trip_id} has no GPS observations")
+
     if trip.nodes is None or trip.arcs is None or trip.arcs.empty:
         raise ValueError(f"Trip {trip.trip_id} is missing its road network")
 
-    track = trip.track
-    nodes = trip.nodes
-    arcs = trip.arcs
-    if arcs[["from_node", "to_node"]].to_numpy().min() < 0 or arcs[["from_node", "to_node"]].to_numpy().max() >= len(nodes):
-        raise ValueError(f"Trip {trip.trip_id} contains an arc with an invalid node reference")
+    # 1. Project the trip into local metric coordinates.
+    t0 = time.perf_counter()
+    geom = TripGeometry(trip.track, trip.nodes, trip.arcs)
+    timings["project_ms"] = (time.perf_counter() - t0) * 1000
 
-    prep_start = time.perf_counter()
-    projector = LocalProjector.for_points(track["lon"].to_numpy(), track["lat"].to_numpy())
-    gps_x, gps_y = projector.forward(track["lon"].to_numpy(), track["lat"].to_numpy())
-    node_x, node_y = projector.forward(nodes["lon"].to_numpy(), nodes["lat"].to_numpy())
-    arc_pairs = arcs[["from_node", "to_node"]].to_numpy(dtype=int)
-    ax, ay = node_x[arc_pairs[:, 0]], node_y[arc_pairs[:, 0]]
-    bx, by = node_x[arc_pairs[:, 1]], node_y[arc_pairs[:, 1]]
-    prep_ms = (time.perf_counter() - prep_start) * 1000
-
-    infer_start = time.perf_counter()
-    # One row per observation, one column per directed arc. This is the
-    # baseline only; later model artifacts can replace this selection step.
-    distances, _ = point_segment_distance(
-        gps_x[:, None], gps_y[:, None], ax[None, :], ay[None, :], bx[None, :], by[None, :]
+    # 2. Generate nearby directed-arc candidates.
+    t0 = time.perf_counter()
+    candidates, no_candidate_obs = generate_candidates(
+        geom, trip.trip_id
     )
-    pred_arcs = np.argmin(distances, axis=1).astype(int).tolist()
-    nearest_dist = distances[np.arange(len(track)), pred_arcs].astype(float).tolist()
-    route_arc_ids = _deduplicate(pred_arcs)
+    timings["candidates_ms"] = (time.perf_counter() - t0) * 1000
 
-    # Construct the route from the directed endpoints of the selected arcs.
-    route_node_ids: list[int] = []
+    # 3. Score candidates using an artifact or the distance + heading baseline.
+    t0 = time.perf_counter()
+    scorer = artifacts.get("scorer")
+
+    if scorer is not None:
+        scores = np.asarray(scorer(geom, candidates))
+    else:
+        scores = baseline_scores(geom, candidates)
+
+    timings["scoring_ms"] = (time.perf_counter() - t0) * 1000
+
+    # 4. Decode the best candidate for each observation.
+    t0 = time.perf_counter()
+    decoder = artifacts.get("decoder")
+
+    if decoder is not None:
+        pred = decoder(geom, candidates, scores)
+    else:
+        pred = argmax_per_obs(candidates, scores, geom.n_obs)
+
+    pred = fill_missing(
+        np.asarray(pred, dtype=np.int64),
+        geom.t,
+    )
+
+    timings["decode_ms"] = (time.perf_counter() - t0) * 1000
+
+    # 5. Construct route geometry from predicted directed arcs.
+    t0 = time.perf_counter()
+
+    valid_pred = pred[pred >= 0]
+    route_arc_ids = _deduplicate(valid_pred.tolist())
+
+    arc_pairs = trip.arcs[
+        ["from_node", "to_node"]
+    ].to_numpy(dtype=np.int64)
+
+    route_node_ids = []
+
     for arc_id in route_arc_ids:
         u, v = arc_pairs[arc_id]
+
         if not route_node_ids:
             route_node_ids.extend([int(u), int(v)])
         elif route_node_ids[-1] == int(u):
             route_node_ids.append(int(v))
         else:
-            # Preserve a visible discontinuity instead of silently inventing
-            # a shortest-path connection before Sudhe's HMM is integrated.
             route_node_ids.extend([int(u), int(v)])
-    route_lon, route_lat = projector.inverse(node_x[route_node_ids], node_y[route_node_ids]) if route_node_ids else ([], [])
-    route_lonlat = [[float(lon), float(lat)] for lon, lat in zip(route_lon, route_lat)]
 
-    # Return a bounded local network overlay for the Folium map. This avoids
-    # sending an entire large road graph to the browser.
+    if route_node_ids:
+        route_lon = trip.nodes["lon"].to_numpy(dtype=float)[route_node_ids]
+        route_lat = trip.nodes["lat"].to_numpy(dtype=float)[route_node_ids]
+        route_lonlat = np.column_stack(
+            [route_lon, route_lat]
+        ).round(7).tolist()
+    else:
+        route_lonlat = []
+
+    # 6. Build a bounded network overlay around the GPS track.
+    projector = geom.proj
+    gps_x, gps_y = geom.obs_x, geom.obs_y
+    ax, ay, bx, by = geom.ax, geom.ay, geom.bx, geom.by
+
     margin_m = 100.0
-    min_x, max_x = float(np.min(gps_x) - margin_m), float(np.max(gps_x) + margin_m)
-    min_y, max_y = float(np.min(gps_y) - margin_m), float(np.max(gps_y) + margin_m)
+
     in_view = (
-        (np.maximum(ax, bx) >= min_x) & (np.minimum(ax, bx) <= max_x)
-        & (np.maximum(ay, by) >= min_y) & (np.minimum(ay, by) <= max_y)
+        (np.maximum(ax, bx) >= gps_x.min() - margin_m)
+        & (np.minimum(ax, bx) <= gps_x.max() + margin_m)
+        & (np.maximum(ay, by) >= gps_y.min() - margin_m)
+        & (np.minimum(ay, by) <= gps_y.max() + margin_m)
     )
+
     nearby_ids = np.flatnonzero(in_view)[:3000]
     network_lonlat = []
-    if len(nearby_ids):
-        endpoints_x = np.column_stack([ax[nearby_ids], bx[nearby_ids]]).ravel()
-        endpoints_y = np.column_stack([ay[nearby_ids], by[nearby_ids]]).ravel()
-        endpoints_lon, endpoints_lat = projector.inverse(endpoints_x, endpoints_y)
-        coords = np.column_stack([endpoints_lon, endpoints_lat]).reshape(-1, 2, 2)
-        network_lonlat = [segment.astype(float).tolist() for segment in coords]
 
-    infer_ms = (time.perf_counter() - infer_start) * 1000
-    gps = [[float(lon), float(lat)] for lon, lat in zip(track["lon"], track["lat"])]
-    total_ms = (time.perf_counter() - started) * 1000
+    if len(nearby_ids):
+        endpoint_x = np.column_stack(
+            [ax[nearby_ids], bx[nearby_ids]]
+        ).ravel()
+
+        endpoint_y = np.column_stack(
+            [ay[nearby_ids], by[nearby_ids]]
+        ).ravel()
+
+        endpoint_lon, endpoint_lat = projector.inverse(
+            endpoint_x, endpoint_y
+        )
+
+        segments = np.column_stack(
+            [endpoint_lon, endpoint_lat]
+        ).reshape(-1, 2, 2)
+
+        network_lonlat = [
+            segment.astype(float).tolist()
+            for segment in segments
+        ]
+
+    # Distances for the selected candidates.
+    distance_lookup = {
+        (int(row.obs_idx), int(row.arc_id)): float(row.dist_m)
+        for row in candidates[
+            ["obs_idx", "arc_id", "dist_m"]
+        ].itertuples(index=False)
+    }
+
+    nearest_distances = [
+        distance_lookup.get((i, int(arc_id)))
+        if arc_id >= 0 else None
+        for i, arc_id in enumerate(pred)
+    ]
+
+    timings["route_ms"] = (time.perf_counter() - t0) * 1000
+    timings["total"] = (time.perf_counter() - started) * 1000
+
+    # 7. Report which prediction components were used.
     return {
         "trip_id": trip.trip_id,
-        "gps": gps,
-        "pred_arcs": pred_arcs,
-        "route_arc_ids": route_arc_ids,
+        "gps": trip.track[
+            ["lon", "lat"]
+        ].to_numpy(dtype=float).round(7).tolist(),
+        "pred_arcs": pred.tolist(),
+        "route_arc_ids": valid_pred.tolist(),
         "route_lonlat": route_lonlat,
         "network_lonlat": network_lonlat,
-        "nearest_dist_m": nearest_dist,
+        "nearest_dist_m": nearest_distances,
         "timings_ms": {
-            "preprocess": round(prep_ms, 3),
-            "inference": round(infer_ms, 3),
-            "total": round(total_ms, 3),
+            key: round(value, 2)
+            for key, value in timings.items()
         },
-        "model": "nearest_arc_baseline",
+        "no_candidate_obs": np.asarray(
+            no_candidate_obs, dtype=int
+        ).tolist(),
+        "method": {
+            "scorer": (
+                "artifact" if scorer is not None
+                else "baseline: distance + heading"
+            ),
+            "decoder": (
+                "artifact" if decoder is not None
+                else "per-observation argmax"
+            ),
+            "n_candidates": int(len(candidates)),
+        },
+        "model": (
+    "nearest_arc_baseline"
+    if artifacts.get("mode") == "nearest_arc" or scorer is None
+    else "trained_artifact"
+),
     }
+
+    
+    
+
+    
