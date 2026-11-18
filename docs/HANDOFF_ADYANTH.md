@@ -41,6 +41,14 @@ At inference time call `generate_candidates(TripGeometry.from_trip(trip), trip_i
 
   Honest reading: with distance-only features both models do no better than "pick the nearest arc". Almost all remaining errors are the reverse twin of the right arc (same geometry, opposite direction). GNB's probabilities are badly calibrated (log loss 0.75 vs 0.26) because its features are strongly correlated. Train and CV F1 are equal, so there is no overfitting; the models are underfitting for lack of information.
 
+## Baseline pipeline (works now)
+
+`pathsnap.pipeline.predict_trip(trip, artifacts=None)` returns `{"gps", "pred_arcs", "route_lonlat", "timings_ms", "no_candidate_obs", "method"}`. It never takes a route.
+- `artifacts=None` gives the baseline rule: `score = -(dist_m + 20 m * heading mismatch)`, with the 20 m weight chosen on train (`scripts/eval_baseline.py`). Student_test Top-1 is 0.832 (nearest arc alone: 0.530), continuity 0.73, ~21 ms per trip.
+- `artifacts["scorer"](geom, cands) -> np.ndarray` (higher = better, e.g. `predict_proba[:, 1]` on your features) replaces the rule.
+- `artifacts["decoder"](geom, cands, scores) -> arc per observation` replaces the argmax (Sudhe's Viterbi).
+- **Tilak:** `api/main.py` already calls `predict_trip(trip, ARTIFACTS)` with `ARTIFACTS = None`, so `/predict` now returns a real route instead of a 501.
+
 ## For the others
 
 - **Advitha (features):** the single most important feature is **direction**: the angle between the GPS heading (central difference, ignore points that moved < 5 m) and the arc bearing. Without it, Top-1 is capped near 0.53 because about 92% of arcs have an identical reverse twin. `labels.heading_mismatch(geom, arc_ids, min_move_m)` already computes `(1 - cos)/2` vectorised; feel free to reuse it. Clip or robustify speed features: trips 00000032/00000013/00000001 have sustained steps > 60 m/s.
@@ -52,4 +60,4 @@ At inference time call `generate_candidates(TripGeometry.from_trip(trip), trip_i
 
 - The reference route covers only part of the track in a few trips; those labels are flagged, not fixed.
 - Top-1 counts an observation without a positive candidate (a miss) as wrong; at R = 60 m / K = 30 this is negligible on reliable labels.
-- `pipeline.predict_trip` is still a stub; wiring it to the final model + HMM is my later job (SPLIT.md).
+- `pipeline.predict_trip` now runs a rule-based baseline (nearest arc + heading penalty, student_test Top-1 0.832). The trained model and the HMM still need to be plugged in as `artifacts["scorer"]` / `artifacts["decoder"]`.
