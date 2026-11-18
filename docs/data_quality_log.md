@@ -59,3 +59,19 @@ Source: `eda_route.csv`, figure `eda_route.png`.
 - Decision: only arcs with an end node within 200 m of the track are drawn. A bounding-box filter produced 8-15 MB files for long diagonal trips; the corridor keeps every map under 3 MB.
 - Basemap: Esri Light Gray Canvas (no API key, works from `file://`). The OSM tile server returns 403 for pages opened from disk and CARTO now requires a key. Tiles need internet; the data layers do not.
 - Screenshots: `report/figures/map_eda_train_00000033.png`, `map_eda_train_00000072.png` (Firefox headless `--screenshot`; basemap tiles did not load in time for the second one).
+
+## 7. Derived per-observation labels (milestone 2)
+Source: `src/pathsnap/labels.py`, `scripts/build_labels.py` -> `data/processed/labels/<partition>/<trip>.parquet`,
+`experiments/results/label_quality.csv`, `experiments/figures/label_quality.png`, check maps `maps/labels_*.html` (`scripts/make_maps.py --labels`).
+
+**The labels are derived, not observed.** The reference route is an ordered arc list supplied with the data; it is not independently verified ground truth, and assigning a GPS point to one of its arcs is our own modelling step. Every metric that uses these labels (training, Top-1, miss rate) inherits that uncertainty, and the report must say so.
+
+Method: monotonic DP alignment (DTW-like). State = position in the route; cost per point = distance to that route arc in metres, capped at 100 m, plus up to 10 m when the GPS heading (central difference, only if the point moved >= 5 m) is opposite to the arc direction; moving forward by more than one route arc costs 10 m per skipped arc, free across time gaps > 30 s; skipping route arcs before the first / after the last point costs 0.5 m per arc. The route index never decreases. O(n_obs x route_len) per trip, all 90 trips in ~2 s on 8 cores. Verified against brute force on random small cases (`tests/test_labels.py`).
+- Why heading: about 92% of arcs have a geometrically identical reverse twin, and routes that drive out and back along the same street contain both. Distance alone cannot tell which leg a point belongs to.
+- Why the cap: a single far-off point must still get a label but must not pull its neighbours to the wrong part of the route.
+
+Quality (all 90 trips): median distance to the aligned arc 4.75 m (median of trip medians; range 3.5-140 m), p95 14.6 m (median over trips). Route coverage (share of route arcs that received at least one point) median 0.99, minimum 0.81: very short arcs passed at speed get no 1 Hz sample.
+- Points > 50 m from their aligned arc are flagged `is_outlier` but keep their label. Train: 23,165 of 208,417 points (11.1%), student_test: 27 of 19,160 (0.14%). **They are concentrated in five trips**: 00000054 (89%), 00000033 (59%), 00000002 (12%), 00000066 (9%), 00000043 (7%); 85 of 90 trips have < 5%.
+- Cause, checked on the maps and numerically: in 00000054, 00000033 and 00000002 those points are > 50 m from *every* route arc (87%, 59%, 12% of points), i.e. the **reference route covers only part of the GPS track**. This is a limitation of the reference data, not an alignment failure; the labels for those points are meaningless.
+- Decision: labels stay as they are (contract), and the per-observation flag lives in `data/processed/labels/<partition>/<trip>.parquet` (`obs_idx, route_pos, arc_id, dist_m, is_outlier, after_gap`). **Recommendation for training and evaluation:** drop observations with `is_outlier == True` (join on `trip_id, obs_idx`), and report how many were dropped. Student-test is barely affected (0.14%).
+- 90% of non-outlier points are aligned to the nearest route arc; where they are not, the aligned arc is almost always within 0.5 m of the nearest one (97% of points), i.e. ties between twin arcs or at corners resolved by route order and heading.
