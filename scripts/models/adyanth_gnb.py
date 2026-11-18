@@ -15,6 +15,9 @@ from pathsnap.harness import evaluate_model
 
 CONFIG = {"var_smoothing": 1e-9, "priors": "empirical", "scaler": "standard"}
 
+def build():
+    return Pipeline([("scale", StandardScaler()), ("clf", GaussianNB(var_smoothing=CONFIG["var_smoothing"]))])
+
+
 if __name__ == "__main__":
-    est = Pipeline([("scale", StandardScaler()), ("clf", GaussianNB(var_smoothing=CONFIG["var_smoothing"]))])
-    evaluate_model("adyanth_gnb", "probabilistic (generative)", est, CONFIG)
+    evaluate_model("adyanth_gnb", "probabilistic (generative)", build(), CONFIG)
