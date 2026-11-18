@@ -68,7 +68,11 @@ python scripts/models/adyanth_gnb.py     #   -> experiments/results/models/<name
 python scripts/models/advitha_lgbm.py
 python scripts/models/advitha_hgb.py
 python scripts/models/advitha_xgb.py
+python scripts/models/adyanth_sgd.py
 python scripts/cv_compare.py             # comparison table + figure  -> experiments/results/model_comparison.csv
+python scripts/export_artifacts.py       # selected model (best CV Top-1) -> artifacts/model.joblib, metadata.json
+python scripts/eval_pipeline.py          # predict_trip end to end on student_test -> experiments/results/pipeline_*.csv
+python scripts/make_maps.py --predicted  # report maps: reference vs predicted route -> maps/predicted_*.html
 ```
 
 **Adding a model:** write `scripts/models/<you>_<model>.py` that builds an sklearn-compatible estimator (scalers inside a `Pipeline`) and calls `pathsnap.harness.evaluate_model(name, family, estimator, config)`. The harness fixes the data, the folds (`experiments/results/cv_folds.csv`), the metrics and the output format, so every model is comparable. For slow models pass `max_train_obs=` to subsample training observations (recorded in the JSON).
