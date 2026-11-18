@@ -1,0 +1,7 @@
+  [advitha_lgbm] fold 0: macro F1 0.9432, Top-1 0.8967, fit 10.3 s
+  [advitha_lgbm] fold 1: macro F1 0.9001, Top-1 0.8172, fit 9.9 s
+  [advitha_lgbm] fold 2: macro F1 0.9366, Top-1 0.8873, fit 10.0 s
+  [advitha_lgbm] fold 3: macro F1 0.9045, Top-1 0.8253, fit 10.6 s
+  [advitha_lgbm] fold 4: macro F1 0.9384, Top-1 0.8930, fit 9.1 s
+advitha_lgbm: CV macro F1 0.9246 +/- 0.0184, CV Top-1 0.8639 | student_test Top-1 0.8787, macro F1 0.9330, log loss 0.0473 | fit 11.7 s, 37.0 ms/trip -> experiments/results/models/advitha_lgbm.json
+advitha_lgbm wall 83.10 s

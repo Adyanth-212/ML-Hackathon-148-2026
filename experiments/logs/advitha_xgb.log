@@ -1,0 +1,7 @@
+  [advitha_xgb] fold 0: macro F1 0.9429, Top-1 0.8968, fit 11.3 s
+  [advitha_xgb] fold 1: macro F1 0.8990, Top-1 0.8135, fit 10.3 s
+  [advitha_xgb] fold 2: macro F1 0.9373, Top-1 0.8871, fit 10.5 s
+  [advitha_xgb] fold 3: macro F1 0.9044, Top-1 0.8261, fit 10.7 s
+  [advitha_xgb] fold 4: macro F1 0.9381, Top-1 0.8925, fit 10.2 s
+advitha_xgb: CV macro F1 0.9243 +/- 0.0187, CV Top-1 0.8632 | student_test Top-1 0.8809, macro F1 0.9337, log loss 0.0472 | fit 13.8 s, 10.5 ms/trip -> experiments/results/models/advitha_xgb.json
+advitha_xgb wall 76.91 s
