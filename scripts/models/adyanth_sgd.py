@@ -1,4 +1,4 @@
-"""Adyanth model 3 (optional in SPLIT.md): linear classifier trained by stochastic gradient descent.
+"""Adyanth model 3: linear classifier trained by stochastic gradient descent.
 
     python scripts/models/adyanth_sgd.py
 

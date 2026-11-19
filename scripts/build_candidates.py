@@ -4,7 +4,7 @@
     python scripts/build_candidates.py
 
 Writes, per trip, data/processed/candidates/<partition>/<trip_id>.parquet (zstd) with the
-SPLIT.md contract columns ``trip_id, obs_idx, arc_id, dist_m, proj_frac, label`` and
+candidate-table columns ``trip_id, obs_idx, arc_id, dist_m, proj_frac, label`` and
 experiments/results/candidate_stats.csv. R, K and the fallback radius come from
 configs/candidates.yaml. Observations with no candidate even after the fallback keep zero rows
 and are counted in ``n_no_candidates``.

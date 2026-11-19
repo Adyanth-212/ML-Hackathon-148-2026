@@ -10,7 +10,7 @@ Ties: two-way streets are two arcs with identical geometry, so equal distances
 are common. Candidates are ordered by ``(dist_m, arc_id)`` everywhere (here and
 in the miss-rate sweep) so the K cut is deterministic.
 
-Output = the candidate-table contract from SPLIT.md section 3:
+Output = the candidate-table contract (docs/REFERENCE.md section 3):
 ``trip_id, obs_idx, arc_id, dist_m, proj_frac[, label]``.
 """
 from __future__ import annotations

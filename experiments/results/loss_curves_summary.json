@@ -1,0 +1,34 @@
+{
+  "LightGBM (Bayesian-tuned)": {
+    "unit": "iteration",
+    "n": 800,
+    "final_train": 0.03347403955066888,
+    "final_val": 0.04665193200020347,
+    "best_val": 0.04644764452812875,
+    "best_at": 549
+  },
+  "LightGBM (untuned)": {
+    "unit": "iteration",
+    "n": 400,
+    "final_train": 0.04131721690638262,
+    "final_val": 0.04730467556086888,
+    "best_val": 0.04723947045909742,
+    "best_at": 352
+  },
+  "XGBoost": {
+    "unit": "iteration",
+    "n": 400,
+    "final_train": 0.03904790852322655,
+    "final_val": 0.04689784428300086,
+    "best_val": 0.04682418868650252,
+    "best_at": 223
+  },
+  "SGD (logistic loss)": {
+    "unit": "epoch",
+    "n": 30,
+    "final_train": 0.14151437763420718,
+    "final_val": 0.11221592629884525,
+    "best_val": 0.10188581925643748,
+    "best_at": 2
+  }
+}

@@ -55,7 +55,7 @@ def make_map(trip_id: str, partition: str, note: str = "") -> str:
 def main(argv: list[str]) -> int:
     if argv[:1] == ["--predicted"]:
         from pathsnap.pipeline import load_artifacts
-        art = load_artifacts(use_decoder=False)
+        art = load_artifacts(use_decoder=True)
         for tid, note in PREDICTED_SHOWCASE.items():
             make_predicted_map(tid, art, note)
         return 0
@@ -160,7 +160,7 @@ def make_predicted_map(trip_id: str, artifacts: dict, note: str = "", partition:
     m = base_map(float(np.median(lat)), float(np.median(lon)))
     add_network_layer(m, trip.nodes, trip.arcs, arcs_near_track(trip.nodes, trip.arcs, lon, lat, 200), show=True)
     add_route_layer(m, trip.nodes, trip.arcs, route, name=f"Reference route ({len(route)} arcs)", weight=8)
-    fg = folium.FeatureGroup(name="Predicted route (classifier)").add_to(m)
+    fg = folium.FeatureGroup(name="Predicted route (classifier + HMM)").add_to(m)
     folium.PolyLine([(la, lo) for lo, la in res["route_lonlat"]], color=PRED_COLOR, weight=3, opacity=0.9).add_to(fg)
     colors = [GPS_COLOR if r else OUTLIER_COLOR for r in right]
     tips = [f"obs {i}: predicted arc {p}, label arc {a}" for i, (p, a) in enumerate(zip(pred, lab.arc_id))]

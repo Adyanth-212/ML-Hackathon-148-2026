@@ -1,6 +1,6 @@
 # Reference: data, preprocessing and features
 
-For everyone on the team. It describes what the data is, what preprocessing has already been done, what the tables mean, and which features exist. Evidence and numbers: [`docs/data_quality_log.md`](docs/data_quality_log.md). Walk through one trip step by step: [`notebooks/00_before_after.ipynb`](notebooks/00_before_after.ipynb) (outputs saved, you can read it without running anything).
+This document describes what the data is, what preprocessing has already been done, what the tables mean, and which features exist. Evidence and numbers: [`data_quality_log.md`](data_quality_log.md). Walk through one trip step by step: [`notebooks/00_before_after.ipynb`](../notebooks/00_before_after.ipynb) (outputs saved, you can read it without running anything).
 
 ## 1. The raw data
 
@@ -21,7 +21,7 @@ For everyone on the team. It describes what the data is, what preprocessing has 
 
 ## 2. Preprocessing that is already done
 
-Everything below is implemented in `src/pathsnap/` and run by `scripts/`. **Do not redo it in your own code.** Use the saved tables or the library functions.
+Everything below is implemented in `src/pathsnap/` and run by `scripts/`. Later stages use the saved tables or the library functions.
 
 | # | Step | What happens | Code |
 |---|---|---|---|
@@ -30,7 +30,7 @@ Everything below is implemented in `src/pathsnap/` and run by `scripts/`. **Do n
 | 3 | Labels | Each GPS point is aligned to one arc of the reference route by a monotonic dynamic programme (route position never goes backwards; cost is distance in metres, capped at 100 m, plus a heading penalty; skipping route arcs is free across gaps over 30 s). | `pathsnap.labels`, `scripts/build_labels.py` |
 | 4 | Candidates | For each GPS point, the arcs within **R = 60 m**, at most **K = 30** nearest, found with a spatial index. If none is found, one retry at 150 m. | `pathsnap.candidates`, `scripts/build_candidates.py`, `configs/candidates.yaml` |
 
-**R and K are frozen.** Changing them invalidates everyone's feature tables. They were chosen from the miss-rate sweep on training trips only (`experiments/results/candidate_miss_rate.csv`).
+**R and K are fixed.** Changing them invalidates the feature tables. They were chosen from the miss-rate sweep on training trips only (`experiments/results/candidate_miss_rate.csv`).
 
 **The labels are derived, not ground truth.** The reference route is not independently verified. In trips 54, 33 and 2 it covers only part of the GPS track, so 11.1% of train points (0.14% of student-test) are more than 50 m from their aligned arc and flagged `is_outlier`.
 
@@ -89,17 +89,14 @@ Grain: **one row per (GPS point, candidate road)**: the candidate table plus 36 
 
 The motion, endpoint-distance, arc-length and previous/next heading-error features come from Advitha's first draft (`pathsnap_features/`, now replaced). They are computed on the shared candidate table, so every model sees the same rows. Class separation of every feature on TRAIN: `experiments/results/feature_summary.csv`.
 
-**Evaluating a model:** call `pathsnap.harness.evaluate_model(name, family, estimator, config)` from `scripts/models/<you>_<model>.py`. It applies the rules in section 4 (same folds for everyone, saved in `experiments/results/cv_folds.csv`) and writes `experiments/results/models/<name>.json`. `python scripts/cv_compare.py` builds the comparison table. Details and current results: [`docs/HANDOFF_FEATURES_HARNESS.md`](docs/HANDOFF_FEATURES_HARNESS.md).
+**Evaluating a model:** call `pathsnap.harness.evaluate_model(name, family, estimator, config)` from `scripts/models/<you>_<model>.py`. It applies the rules in section 4 (same folds for every model, saved in `experiments/results/cv_folds.csv`) and writes `experiments/results/models/<name>.json`. `python scripts/cv_compare.py` builds the comparison table.
 
 ## 6. Where things are
 
 | What | Where |
 |---|---|
-| Team split and Git rules | [`SPLIT.md`](SPLIT.md) |
-| Full requirements and design | [`docs/PLAN.md`](docs/PLAN.md) |
-| Data issues, assumptions, decisions with evidence | [`docs/data_quality_log.md`](docs/data_quality_log.md) |
-| What the data foundation provides, runtimes | [`docs/HANDOFF_ADYANTH.md`](docs/HANDOFF_ADYANTH.md) |
-| Features, harness, model results | [`docs/HANDOFF_FEATURES_HARNESS.md`](docs/HANDOFF_FEATURES_HARNESS.md), `experiments/results/model_comparison.csv` |
+| Data issues, assumptions, decisions with evidence | [`data_quality_log.md`](data_quality_log.md) |
+| Model results | `experiments/results/model_comparison.csv`, [`RESULTS.md`](../RESULTS.md) |
 | Notebooks: raw to candidate table (00), EDA (01), labels and candidates (02) | `notebooks/` |
 | Figures and CSV results | `experiments/figures/`, `experiments/results/` |
 | Folium maps | `maps/` |

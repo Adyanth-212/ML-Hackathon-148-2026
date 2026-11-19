@@ -1,6 +1,6 @@
 """Feature engineering for (observation, candidate arc) pairs.
 
-Input: one trip's candidate table (SPLIT.md contract: ``trip_id, obs_idx, arc_id,
+Input: one trip's candidate table (candidate-table contract, docs/REFERENCE.md: ``trip_id, obs_idx, arc_id,
 dist_m, proj_frac[, label]``, rows sorted by obs then distance) and the trip's
 ``TripGeometry`` (UTM metres). Output: the same rows plus numeric feature columns.
 Only GPS + road-network information is used, never labels or the reference

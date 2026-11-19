@@ -1,4 +1,4 @@
-"""Shared evaluation harness: every model is evaluated the same way (SPLIT.md section 4).
+"""Shared evaluation harness: every model is evaluated the same way (docs/REFERENCE.md).
 
     from pathsnap.harness import evaluate_model
     evaluate_model("advitha_lgbm", "gradient boosting", estimator, config)

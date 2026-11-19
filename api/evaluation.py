@@ -30,15 +30,26 @@ def _edit_similarity(reference: list[int], predicted: list[int]) -> float:
     return float(1.0 - distance / max(len(reference), len(predicted), 1))
 
 
-def _route_continuity(predicted: list[int], arcs) -> float | None:
-    if len(predicted) < 2:
-        return None
+def _arc_sequence(predicted: list[int], n_arcs: int) -> list[int]:
+    """Per-point arcs -> driven arc sequence: drop invalid ids, collapse consecutive repeats.
+
+    ``route_arc_ids`` from the pipeline has one entry per GPS point, so the same arc repeats
+    while the vehicle is on it. Route metrics compare arc sequences, as in scripts/eval_hmm.py.
+    """
+    out: list[int] = []
+    for arc_id in predicted:
+        if 0 <= arc_id < n_arcs and (not out or out[-1] != arc_id):
+            out.append(arc_id)
+    return out
+
+
+def _route_continuity(sequence: list[int], arcs) -> float | None:
+    """Share of arc changes where the next arc starts at the node the previous one ends."""
+    if len(sequence) < 2:
+        return 1.0 if sequence else None
     pairs = arcs[["from_node", "to_node"]].to_numpy(dtype=int)
-    valid = [arc_id for arc_id in predicted if 0 <= arc_id < len(pairs)]
-    if len(valid) < 2:
-        return None
-    connected = sum(pairs[a, 1] == pairs[b, 0] for a, b in zip(valid, valid[1:]))
-    return float(connected / (len(valid) - 1))
+    connected = sum(pairs[a, 1] == pairs[b, 0] for a, b in zip(sequence, sequence[1:]))
+    return float(connected / (len(sequence) - 1))
 
 
 def _pointwise(files, prediction: dict) -> dict:
@@ -79,7 +90,8 @@ def score(trip_id: str, prediction: dict) -> dict:
         raise FileNotFoundError(f"Evaluator route/network files are incomplete for trip {trip_id}")
 
     reference = read_route(files.route).astype(int).tolist()
-    predicted = [int(value) for value in prediction.get("route_arc_ids", [])]
+    arcs = read_arcs(files.arcs)
+    predicted = _arc_sequence([int(v) for v in prediction.get("route_arc_ids", [])], len(arcs))
     ref_counts, pred_counts = {}, {}
     for value in reference:
         ref_counts[value] = ref_counts.get(value, 0) + 1
@@ -89,7 +101,6 @@ def score(trip_id: str, prediction: dict) -> dict:
     precision = overlap / len(predicted) if predicted else 0.0
     recall = overlap / len(reference) if reference else 0.0
     f1 = 2 * precision * recall / (precision + recall) if precision + recall else 0.0
-    arcs = read_arcs(files.arcs)
     pointwise = _pointwise(files, prediction)
 
     return {
