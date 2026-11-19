@@ -9,7 +9,7 @@ see the predicted route with server-side scores.
 
 **Final result: 91.3% of GPS points on the correct road** on the 10 held-out student-test trips (Bayesian-tuned
 LightGBM + HMM/Viterbi); the same 91.3% on the 10 evaluator trips, scored by the API server.
-Report: [`report/report.pdf`](report/report.pdf). Every model and number: [`RESULTS.md`](RESULTS.md).
+Report: [`report/team_187.pdf`](report/team_187.pdf). Every model and number: [`RESULTS.md`](RESULTS.md).
 
 ## Repository layout
 
@@ -24,7 +24,7 @@ Report: [`report/report.pdf`](report/report.pdf). Every model and number: [`RESU
 | `experiments/` | `results/` (CSVs, per-model JSON, Optuna study), `figures/`, `logs/` |
 | `maps/` | Interactive Folium HTML maps |
 | `notebooks/` | Executed notebooks: before/after preprocessing, EDA, labels and candidates |
-| `report/` | Report source, generator (`build_report.py`), figures, `report.pdf` |
+| `report/` | Report source, generator (`build_report.py`), figures, `team_187.pdf` (final report) |
 | `docs/` | Data-quality log, data/feature reference, AI-use disclosure |
 | `tests/` | Unit and API tests (toy fixtures) |
 | `data/` | `raw/train`, `raw/student_test` (committed), `processed/` (labels and candidates); `raw/evaluator` is never committed |
@@ -74,7 +74,7 @@ python scripts/export_artifacts.py       # selected model -> artifacts/
 python scripts/eval_pipeline.py          # end to end on student_test
 python scripts/make_maps.py --predicted  # reference vs predicted route maps
 python scripts/results_table.py          # RESULTS.md
-python report/build_report.py            # report/report.pdf (needs tectonic or xelatex)
+python report/build_report.py            # LaTeX version of the report (needs tectonic or xelatex)
 ```
 
 A new model is one file in `scripts/models/` that builds an sklearn-compatible estimator and calls
