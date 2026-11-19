@@ -1,4 +1,4 @@
-"""Milestone 2: derive per-observation labels for TRAIN and STUDENT_TEST trips.
+"""Derive per-observation labels for TRAIN and STUDENT_TEST trips.
 
     python scripts/build_labels.py
 

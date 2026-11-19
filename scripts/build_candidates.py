@@ -1,4 +1,4 @@
-"""Milestone 3: build the candidate tables for TRAIN and STUDENT_TEST.
+"""Build the candidate tables for TRAIN and STUDENT_TEST.
 
     python scripts/build_labels.py       # first (labels are attached here)
     python scripts/build_candidates.py

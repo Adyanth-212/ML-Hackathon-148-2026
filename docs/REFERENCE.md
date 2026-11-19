@@ -87,7 +87,7 @@ Grain: **one row per (GPS point, candidate road)**: the candidate table plus 36 
 | sequence | `prev_rule_same`, `prev_rule_adjacent`, `next_rule_same`, `next_rule_adjacent` | agreement with the neighbouring points' best arc under a label-free rule (distance + heading) |
 | density | `n_candidates`, `n_within_10m`, `n_within_25m` | ambiguity from parallel roads and dense junctions |
 
-The motion, endpoint-distance, arc-length and previous/next heading-error features come from Advitha's first draft (`pathsnap_features/`, now replaced). They are computed on the shared candidate table, so every model sees the same rows. Class separation of every feature on TRAIN: `experiments/results/feature_summary.csv`.
+The motion, endpoint-distance, arc-length and previous/next heading-error features are computed from GPS and network geometry; they are computed on the shared candidate table, so every model sees the same rows. Class separation of every feature on TRAIN: `experiments/results/feature_summary.csv`.
 
 **Evaluating a model:** call `pathsnap.harness.evaluate_model(name, family, estimator, config)` from `scripts/models/<you>_<model>.py`. It applies the rules in section 4 (same folds for every model, saved in `experiments/results/cv_folds.csv`) and writes `experiments/results/models/<name>.json`. `python scripts/cv_compare.py` builds the comparison table.
 

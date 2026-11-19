@@ -4,7 +4,7 @@
 
 Why: like Random Forest but split thresholds are drawn at random, which lowers variance
 further and trains faster.
-Hyperparameters are Sudhe's; evaluation goes through the shared harness (36 features, fixed
+Evaluation goes through the shared harness (36 features, fixed
 trip folds, same Top-1 definition) so the result is comparable with every other model.
 """
 from sklearn.ensemble import ExtraTreesClassifier

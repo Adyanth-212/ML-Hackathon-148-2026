@@ -1,4 +1,4 @@
-"""EDA (milestone 1): reproducible tables and figures for TRAIN and STUDENT_TEST.
+"""EDA: reproducible tables and figures for TRAIN and STUDENT_TEST.
 
 Never touches the evaluator partition. Every output is written by this script:
 

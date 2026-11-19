@@ -52,7 +52,7 @@ Source: `eda_route.csv`, figure `eda_route.png`.
 - All route arc ids are valid. Route length 59 to 2,266 arcs.
 - 14 breaks in total (consecutive route arcs not sharing a node) in 11 trips; the gap between the end of one arc and the start of the next is 10.6 to 597.6 m. Decision: kept; the aligner allows skipping and the breaks are reported, not repaired.
 - 10 trips revisit an arc (up to 255 repeated arc entries in one trip); the route can loop, so the alignment must follow the route **order**, not just arc membership.
-- The `.route` is an ordered arc list, **not** one label per GPS point; per-observation labels must be derived (milestone 2).
+- The `.route` is an ordered arc list, **not** one label per GPS point; per-observation labels must be derived .
 
 ## 6. Maps
 `scripts/make_maps.py` -> `maps/eda_<partition>_<trip>.html` for six trips: normal (00000072), gappy (00000078), fast/outliers (00000032), largest network (00000013), low route/GPS ratio (00000033) and student_test (00000056). Layers: raw GPS (blue), road network within 200 m of the track (grey), reference route (green), layer control and legend.
@@ -60,7 +60,7 @@ Source: `eda_route.csv`, figure `eda_route.png`.
 - Basemap: Esri Light Gray Canvas (no API key, works from `file://`). The OSM tile server returns 403 for pages opened from disk and CARTO now requires a key. Tiles need internet; the data layers do not.
 - Screenshots: `report/figures/map_eda_train_00000033.png`, `map_eda_train_00000072.png` (Firefox headless `--screenshot`; basemap tiles did not load in time for the second one).
 
-## 7. Derived per-observation labels (milestone 2)
+## 7. Derived per-observation labels 
 Source: `src/pathsnap/labels.py`, `scripts/build_labels.py` -> `data/processed/labels/<partition>/<trip>.parquet`,
 `experiments/results/label_quality.csv`, `experiments/figures/label_quality.png`, check maps `maps/labels_*.html` (`scripts/make_maps.py --labels`).
 
@@ -76,7 +76,7 @@ Quality (all 90 trips): median distance to the aligned arc 4.75 m (median of tri
 - Decision: labels stay as they are (contract), and the per-observation flag lives in `data/processed/labels/<partition>/<trip>.parquet` (`obs_idx, route_pos, arc_id, dist_m, is_outlier, after_gap`). **Recommendation for training and evaluation:** drop observations with `is_outlier == True` (join on `trip_id, obs_idx`), and report how many were dropped. Student-test is barely affected (0.14%).
 - Per trip, a median of 94% of non-outlier points (mean 91%) are aligned to the geometrically nearest route arc; where they are not, the aligned arc is usually within 0.5 m of the nearest one (median 98% of points per trip), i.e. ties between twin arcs or at corners resolved by route order and heading.
 
-## 8. Candidate generation and the choice of R and K (milestone 3)
+## 8. Candidate generation and the choice of R and K
 Source: `src/pathsnap/candidates.py`, `scripts/candidate_sweep.py` -> `experiments/results/candidate_miss_rate.csv`, `experiments/figures/candidate_miss_rate.png`; `scripts/build_candidates.py` -> `data/processed/candidates/<partition>/<trip>.parquet`, `experiments/results/candidate_stats.csv`.
 
 Method: shapely `STRtree` over each trip's projected arc segments; `dwithin` query, exact point-to-segment distance, rows ordered by `(dist_m, arc_id)` per observation, keep the first K. No candidate within R: one retry at the fallback radius; still nothing: zero rows, counted in `n_no_candidates`.

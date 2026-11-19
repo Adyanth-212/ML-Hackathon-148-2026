@@ -4,7 +4,7 @@
 
 Why: averages many deep trees grown on bootstrap samples with random feature subsets; low
 variance, no scaling, a bagging counterpart to the boosting models.
-Hyperparameters are Sudhe's; evaluation goes through the shared harness (36 features, fixed
+Evaluation goes through the shared harness (36 features, fixed
 trip folds, same Top-1 definition) so the result is comparable with every other model.
 """
 from sklearn.ensemble import RandomForestClassifier

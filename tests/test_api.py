@@ -1,4 +1,4 @@
-"""Toy-fixture tests for Tilak's API/UI deployment milestone."""
+"""Toy-fixture tests for the API and UI deployment path."""
 from __future__ import annotations
 
 from pathlib import Path

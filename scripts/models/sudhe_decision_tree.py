@@ -3,7 +3,7 @@
     python scripts/models/sudhe_decision_tree.py
 
 Why: one interpretable tree; the baseline that shows what the ensembles add.
-Hyperparameters are Sudhe's; evaluation goes through the shared harness (36 features, fixed
+Evaluation goes through the shared harness (36 features, fixed
 trip folds, same Top-1 definition) so the result is comparable with every other model.
 """
 from sklearn.tree import DecisionTreeClassifier

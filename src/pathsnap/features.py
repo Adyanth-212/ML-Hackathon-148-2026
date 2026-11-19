@@ -7,8 +7,8 @@ Only GPS + road-network information is used, never labels or the reference
 route, so the same code runs at inference time.
 
 Feature groups (motion, endpoint distances, arc length/bearing, heading error from
-the previous and next GPS step, and distance/length ratio follow Advitha's first
-``pathsnap_features`` draft; here they are vectorised and computed in projected metres):
+the previous and next GPS step, and distance/length ratio are vectorised
+and computed in projected metres):
 
 * distance  - dist_m, rank, gap to the nearest candidate, ratio to it, projection
               fraction (unclipped) and an outside-the-segment flag, endpoint distances,
